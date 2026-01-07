@@ -85,3 +85,9 @@ export function debounce(fn, ms = 400) {
     t = setTimeout(() => fn(...args), ms);
   };
 }
+
+
+export function safeClone(obj) {
+  if (typeof structuredClone === "function") return structuredClone(obj);
+  return JSON.parse(JSON.stringify(obj));
+}
