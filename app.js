@@ -87,12 +87,11 @@ async function init(){
   render();
 }
 
-function setState(mutator){
+function setState(mutator, opts={ render: true }){
   mutator(STATE);
   persist();
-  render();
+  if(opts.render) render();
 }
-
 function getDay(dayId){ return (STATE.days||[]).find(d=>d.id===dayId); }
 function getEval(day, evId){ return (day?.evaluations||[]).find(e=>e.id===evId); }
 
@@ -152,13 +151,13 @@ function createEvaluation(dayId){
   return ev.id;
 }
 
-function updateEvaluation(dayId, evId, nextEv){
+function updateEvaluation(dayId, evId, nextEv, opts={ render: true }){
   setState(s=>{
     const d = (s.days||[]).find(x=>x.id===dayId);
     if(!d) return;
     d.evaluations = (d.evaluations||[]).map(e=> e.id===evId ? (nextEv.updatedAt=Date.now(), nextEv) : e);
     d.updatedAt = Date.now();
-  });
+  }, opts);
 }
 
 function deleteEvaluation(dayId, evId){
@@ -615,7 +614,8 @@ function renderEval(app, dayId, evId){
   const apply = (mutate)=>{
     const next = safeClone(ev);
     mutate(next);
-    updateEvaluation(day.id, ev.id, next);
+    // Atualiza o rascunho SEM re-render completo (evita perder foco a cada tecla)
+    updateEvaluation(day.id, ev.id, next, { render: false });
   };
 
   $("#protocolo").addEventListener("input", e=>apply(n=>{ n.protocolo=e.target.value; }));
@@ -709,7 +709,7 @@ function renderEval(app, dayId, evId){
   $("#saveBtn").onclick = ()=>{
     const next = safeClone(getEval(getDay(dayId), evId));
     next.status = "final";
-    updateEvaluation(day.id, ev.id, next);
+    updateEvaluation(day.id, ev.id, next, { render: true });
     setToast("Avaliação salva.");
   };
 
