@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAppState } from "../state.jsxx";
 import { Card, Field, HoldToConfirmButton, Section, TopBar, Toast } from "../components/UI.jsx";
-import { isValidCPF, maskCPF, nowLocalISODateTime, onlyDigits, formatDateTimeBR } from "../utils.js";
+import { isValidCPF, maskCPF, nowLocalISODateTime, onlyDigits, formatDateTimeBR, safeClone } from "../utils.js";
 
 function displayName(ev) {
   const nome = (ev?.pessoa?.nome || "").trim();
@@ -102,7 +102,7 @@ export default function EvaluationScreen({ mode }) {
 
   const setField = (path, value) => {
     // shallow path setter (handles known nested structures)
-    const next = structuredClone(ev);
+    const next = safeClone(ev);
     const parts = path.split(".");
     let cur = next;
     for (let i = 0; i < parts.length - 1; i++) cur = cur[parts[i]];
