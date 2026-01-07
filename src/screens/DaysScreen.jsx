@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAppState } from "../state.js";
+import { useAppState } from "../state.jsxx";
 import { formatDateBR, formatDateISO } from "../utils.js";
 import { Card, Field, TopBar } from "../components/UI.jsx";
 

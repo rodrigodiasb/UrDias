@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useAppState } from "../state.js";
+import { useAppState } from "../state.jsxx";
 import { Card, Field, HoldToConfirmButton, Section, TopBar, Toast } from "../components/UI.jsx";
 import { isValidCPF, maskCPF, nowLocalISODateTime, onlyDigits, formatDateTimeBR } from "../utils.js";
 
