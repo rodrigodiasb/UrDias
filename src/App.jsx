@@ -1,6 +1,6 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import { AppStateProvider } from "./state.jsxx";
+import { AppStateProvider } from "./state.jsx";
 import DaysScreen from "./screens/DaysScreen.jsx";
 import DayScreen from "./screens/DayScreen.jsx";
 import EvaluationScreen from "./screens/EvaluationScreen.jsx";
