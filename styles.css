@@ -49,7 +49,7 @@ body{
 .btn.primary{background: rgba(96,165,250,.22); border-color: rgba(96,165,250,.35)}
 .btn.danger{background: rgba(251,113,133,.18); border-color: rgba(251,113,133,.35); position:relative; overflow:hidden}
 .input, .textarea, select.input{ width:100%; padding:12px; border-radius:12px; border:1px solid var(--border);
-  background: rgba(0,0,0,.18); color:var(--text); outline:none; }
+  background: rgba(0,0,0,.18); color:var(--text); outline:none; font-size:16px; }
 .input::placeholder,.textarea::placeholder{color:rgba(148,163,184,.7)}
 .textarea{resize:none}
 .field{display:block; margin:12px 0}

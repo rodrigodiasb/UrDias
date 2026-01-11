@@ -126,8 +126,7 @@ function createEvaluation(dayId){
     createdAt: Date.now(),
     updatedAt: Date.now(),
     protocolo: "",
-    bravo: "",
-    pessoa: { nome:"", documento:"", nascimento:"", idade:"" },
+pessoa: { nome:"", documento:"", nascimento:"", idade:"" },
     docTipo: "documento",
     endereco: "",
     gps: "",
@@ -397,8 +396,7 @@ function renderDay(app, dayId){
 function generateResumo(day, ev){
   const linhas=[];
   linhas.push(`PROTOCOLO: ${ev.protocolo||"-"}`);
-  if(ev.bravo) linhas.push(`BRAVO/GU: ${ev.bravo}`);
-  linhas.push(`DATA: ${day?.dateISO||"-"}`);
+linhas.push(`DATA: ${day?.dateISO||"-"}`);
   if(day?.viatura) linhas.push(`VIATURA: ${day.viatura}`);
   const integrantes=(day?.integrantesText||"").split("\n").map(x=>x.trim()).filter(Boolean);
   if(integrantes.length) linhas.push(`GUARNIÇÃO: ${integrantes.join("; ")}`);
@@ -490,7 +488,6 @@ function renderEval(app, dayId, evId){
           <div class="muted" id="gpsLabel">${ev.gps?escapeHTML("GPS: "+ev.gps):"Sem GPS registrado."}</div>
           ${btn("📍 Usar GPS","",`type="button" id="gpsBtn"`)}
         </div>
-        ${field("Bravo / GU (opcional)", `<input class="input" id="bravo" placeholder="Ex.: Bravo 03" />`)}
       `, true)}
 
       ${section("2) Dados pessoais", `
@@ -596,9 +593,7 @@ ${section("4) Sinais vitais", `
   $("#resumoBtn").onclick = ()=>showResumoModal(day, ev);
 
   // set initial values
-  $("#protocolo").value = ev.protocolo||"";
-  $("#bravo").value = ev.bravo||"";
-  $("#nome").value = ev.pessoa?.nome||"";
+  $("#protocolo").value = ev.protocolo||"";  $("#nome").value = ev.pessoa?.nome||"";
   $("#doc").value = ev.pessoa?.documento||"";
   $("#nasc").value = ev.pessoa?.nascimento||"";
   $("#idade").value = ev.pessoa?.idade||"";
@@ -646,9 +641,7 @@ ${section("4) Sinais vitais", `
     updateEvaluation(day.id, ev.id, next, { render: false });
   };
 
-  $("#protocolo").addEventListener("input", e=>apply(n=>{ n.protocolo=e.target.value; }));
-  $("#bravo").addEventListener("input", e=>apply(n=>{ n.bravo=e.target.value; }));
-  $("#nome").addEventListener("input", e=>apply(n=>{ n.pessoa.nome=e.target.value; }));
+  $("#protocolo").addEventListener("input", e=>apply(n=>{ n.protocolo=e.target.value; }));  $("#nome").addEventListener("input", e=>apply(n=>{ n.pessoa.nome=e.target.value; }));
 
   // nascimento / idade (sincronização simples)
   function calcIdade(iso){
@@ -666,7 +659,6 @@ ${section("4) Sinais vitais", `
   function syncDobAgeUI(){
     const idadeVal = ($("#idade").value || "").trim();
     const nascVal = ($("#nasc").value || "").trim();
-    // Se idade estiver preenchida e não tiver nascimento, bloqueia o nascimento
     $("#nasc").disabled = !!(idadeVal && !nascVal);
   }
 
