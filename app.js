@@ -449,14 +449,17 @@ linhas.push(`DATA: ${day?.dateISO||"-"}`);
   const adm=ev.admissao||{};
   if(adm.tipo || adm.nome || adm.marcaRetida){
     linhas.push("");
-    linhas.push("ADMISSÃO:");
-    const tipoTxt = adm.tipo==="medico"?"Médico":adm.tipo==="enfermeiro"?"Enfermeiro":"-";
-    linhas.push(`- Profissional: ${tipoTxt}${adm.nome? " — "+adm.nome:""}`);
+    // Montagem conforme rádio (médico/enfermeiro). "(a)" cobre ambos os sexos.
+    const tipoTxt = adm.tipo==="medico" ? "Médico(a)" : adm.tipo==="enfermeiro" ? "Enfermeiro(a)" : "Profissional";
+    const nomeTxt = (adm.nome||"").trim();
+    linhas.push(`ADMISSÃO PROFISSIONAL: ${tipoTxt}${nomeTxt ? " — " + nomeTxt : ""}`);
+
     if(adm.marcaRetida){
       const dt = adm.dataHora ? formatDateTimeBR(adm.dataHora) : "-";
-      linhas.push(`- Marca retida: SIM (registrada em ${dt})`);
+      const por = nomeTxt ? ` por ${tipoTxt} ${nomeTxt}` : "";
+      linhas.push(`MACA RETIDA: SIM${por} em ${dt}`);
     }else{
-      linhas.push("- Marca retida: NÃO");
+      linhas.push("MACA RETIDA: NÃO");
     }
   }
   return linhas.join("\n");
