@@ -127,7 +127,7 @@ function createEvaluation(dayId){
     updatedAt: Date.now(),
     protocolo: "",
     bravo: "",
-    pessoa: { nome:"", documento:"" },
+    pessoa: { nome:"", documento:"", nascimento:"", idade:"" },
     docTipo: "documento",
     endereco: "",
     gps: "",
@@ -405,16 +405,31 @@ function generateResumo(day, ev){
   linhas.push("");
   linhas.push(`VÍTIMA: ${displayName(ev)}`);
   linhas.push(`DOCUMENTO: ${ev.pessoa?.documento||"-"}`);
+  const idadeTxt = (ev.pessoa?.idade||"").trim();
+  if(idadeTxt) linhas.push(`IDADE: ${idadeTxt} ano(s)`);
+
   if(ev.endereco) linhas.push(`ENDEREÇO: ${ev.endereco}`);
   if(ev.gps) linhas.push(`GPS: ${ev.gps}`);
 
   const v=ev.vitais||{};
   const pa=v.pa||{};
-  const paTxt = pa.prejudicada ? "Prejudicada" : (pa.pas && pa.pad ? `${pa.pas}x${pa.pad} mmHg` : "-");
-  const fcTxt = v.fc?.prejudicada ? "Prejudicada" : (v.fc?.valor||"-");
-  const spo2Txt = v.spo2?.prejudicada ? "Prejudicada" : (v.spo2?.valor ? `${v.spo2.valor}%` : "-");
-  const mrTxt = v.mr?.prejudicada ? "Prejudicada" : (v.mr?.valor||"-");
-  const gcsTxt = v.glasgow || "-";
+  const paFilled = !!(String(pa.pas||"").trim() && String(pa.pad||"").trim());
+  const paTxt = (pa.prejudicada || !paFilled) ? "Prejudicada" : `${pa.pas}x${pa.pad} mmHg`;
+
+  const fcObj = v.fc||{};
+  const fcFilled = !!String(fcObj.valor||"").trim();
+  const fcTxt = (fcObj.prejudicada || !fcFilled) ? "Prejudicada" : (fcObj.valor||"-");
+
+  const spo2Obj = v.spo2||{};
+  const spo2Filled = !!String(spo2Obj.valor||"").trim();
+  const spo2Txt = (spo2Obj.prejudicada || !spo2Filled) ? "Prejudicada" : `${spo2Obj.valor}%`;
+
+  const mrObj = v.mr||{};
+  const mrFilled = !!String(mrObj.valor||"").trim();
+  const mrTxt = (mrObj.prejudicada || !mrFilled) ? "Prejudicada" : (mrObj.valor||"-");
+
+  const gcsFilled = !!String(v.glasgow||"").trim();
+  const gcsTxt = gcsFilled ? v.glasgow : "Prejudicada";
   linhas.push("");
   linhas.push(`SINAIS VITAIS: PA ${paTxt} | FC ${fcTxt} | SpO₂ ${spo2Txt} | MR ${mrTxt} | Glasgow ${gcsTxt}`);
 
@@ -468,8 +483,13 @@ function renderEval(app, dayId, evId){
         ${ev.status==="final"?pill("FINAL","ok"):pill("DRAFT","draft")}
       </div>
 
-      ${section("1) Protocolo", `
+      ${section("1) Informações gerais", `
         ${field("Protocolo (primeiro de tudo)", `<input class="input" id="protocolo" placeholder="Ex.: 2026-000123" />`)}
+        ${field("Endereço", `<textarea class="textarea" id="endereco" rows="3" placeholder="Rua, número, bairro, referência..."></textarea>`)}
+        <div class="row space">
+          <div class="muted" id="gpsLabel">${ev.gps?escapeHTML("GPS: "+ev.gps):"Sem GPS registrado."}</div>
+          ${btn("📍 Usar GPS","",`type="button" id="gpsBtn"`)}
+        </div>
         ${field("Bravo / GU (opcional)", `<input class="input" id="bravo" placeholder="Ex.: Bravo 03" />`)}
       `, true)}
 
@@ -480,17 +500,23 @@ function renderEval(app, dayId, evId){
         ${field("CPF ou Documento", `<input class="input" id="doc" placeholder="CPF (11 dígitos) ou outro documento" />`,
           `<span id="docHint" class="hint">Detectado: Documento.</span>`
         )}
-      `, false)}
 
-      ${section("3) Endereço", `
-        ${field("Endereço", `<textarea class="textarea" id="endereco" rows="3" placeholder="Rua, número, bairro, referência..."></textarea>`)}
-        <div class="row space">
-          <div class="muted" id="gpsLabel">${ev.gps?escapeHTML("GPS: "+ev.gps):"Sem GPS registrado."}</div>
-          ${btn("📍 Usar GPS","",`type="button" id="gpsBtn"`)}
+        <div class="grid2">
+          <div class="card">
+            <div class="title">Data de nascimento</div>
+            <input class="input" type="date" id="nasc" />
+            <div class="muted" style="margin-top:6px">Ao preencher, a idade é calculada automaticamente.</div>
+          </div>
+
+          <div class="card">
+            <div class="title">Idade</div>
+            <input class="input" id="idade" inputmode="numeric" placeholder="anos" />
+            <div class="muted" style="margin-top:6px">Se preencher a idade, a data de nascimento fica opcional.</div>
+          </div>
         </div>
       `, false)}
 
-      ${section("4) Sinais vitais", `
+${section("4) Sinais vitais", `
         <div class="grid2">
           <div class="card">
             <div class="title">PA (Pressão arterial)</div>
@@ -574,6 +600,8 @@ function renderEval(app, dayId, evId){
   $("#bravo").value = ev.bravo||"";
   $("#nome").value = ev.pessoa?.nome||"";
   $("#doc").value = ev.pessoa?.documento||"";
+  $("#nasc").value = ev.pessoa?.nascimento||"";
+  $("#idade").value = ev.pessoa?.idade||"";
   $("#endereco").value = ev.endereco||"";
 
   $("#pas").value = ev.vitais?.pa?.pas||"";
@@ -621,6 +649,53 @@ function renderEval(app, dayId, evId){
   $("#protocolo").addEventListener("input", e=>apply(n=>{ n.protocolo=e.target.value; }));
   $("#bravo").addEventListener("input", e=>apply(n=>{ n.bravo=e.target.value; }));
   $("#nome").addEventListener("input", e=>apply(n=>{ n.pessoa.nome=e.target.value; }));
+
+  // nascimento / idade (sincronização simples)
+  function calcIdade(iso){
+    if(!iso) return "";
+    const [y,m,d] = iso.split("-").map(Number);
+    if(!y||!m||!d) return "";
+    const today = new Date();
+    let age = today.getFullYear() - y;
+    const md = (today.getMonth()+1)*100 + today.getDate();
+    const bd = m*100 + d;
+    if(md < bd) age -= 1;
+    if(age < 0) age = 0;
+    return String(age);
+  }
+  function syncDobAgeUI(){
+    const idadeVal = ($("#idade").value || "").trim();
+    const nascVal = ($("#nasc").value || "").trim();
+    // Se idade estiver preenchida e não tiver nascimento, bloqueia o nascimento
+    $("#nasc").disabled = !!(idadeVal && !nascVal);
+  }
+
+  $("#nasc").addEventListener("input", e=>{
+    const iso = e.target.value;
+    const idade = calcIdade(iso);
+    if(idade){
+      $("#idade").value = idade;
+    }
+    apply(n=>{ n.pessoa.nascimento = iso; n.pessoa.idade = idade || ""; });
+    syncDobAgeUI();
+  });
+
+  $("#idade").addEventListener("input", e=>{
+    const v = e.target.value.replace(/\D+/g,"").slice(0,3);
+    e.target.value = v;
+    if(v){
+      if($("#nasc").value){
+        $("#nasc").value = "";
+      }
+      apply(n=>{ n.pessoa.idade = v; n.pessoa.nascimento = ""; });
+    }else{
+      apply(n=>{ n.pessoa.idade = ""; });
+    }
+    syncDobAgeUI();
+  });
+
+  syncDobAgeUI();
+
 
   $("#doc").addEventListener("input", e=>{
     const raw = e.target.value;
