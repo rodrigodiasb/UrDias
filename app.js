@@ -79,7 +79,7 @@ async function init(){
     navigator.serviceWorker.register("./sw.js").catch(()=>{});
   }
 
-  window.addEventListener("hashchange", render);
+  window.addEventListener("hashchange", ()=>{ saveState(STATE).catch(()=>{}); render(); });
   document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="hidden") saveState(STATE).catch(()=>{}); });
   window.addEventListener("pagehide", ()=>{ saveState(STATE).catch(()=>{}); });
 
@@ -775,6 +775,63 @@ ${section("4) Sinais vitais", `
     if(checked) $("#marcaDT").value = getEval(getDay(dayId), evId)?.admissao?.dataHora || nowLocalISODateTime();
   });
   $("#marcaDT").addEventListener("input", e=>apply(n=>{ n.admissao.dataHora=e.target.value; }));
+
+
+  // Enter/Retorno no iOS: ir para o próximo campo (exceto textarea do Caso clínico)
+  function isVisible(el){
+    return !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
+  }
+  function focusNext(current){
+    const scope = document.querySelector("main.content");
+    if(!scope) return;
+    const focusables = Array.from(scope.querySelectorAll("input, select, textarea"))
+      .filter(el => !el.disabled && !el.readOnly && isVisible(el));
+    const idx = focusables.indexOf(current);
+    if(idx >= 0 && idx < focusables.length-1){
+      focusables[idx+1].focus();
+      try{ focusables[idx+1].select?.(); }catch{}
+    }
+  }
+  // Aplica comportamento Enter => próximo (exceto textarea)
+  Array.from(document.querySelectorAll("main.content input, main.content select")).forEach(el=>{
+    el.setAttribute("enterkeyhint","next");
+    el.addEventListener("keydown", (e)=>{
+      if(e.key === "Enter"){
+        e.preventDefault();
+        focusNext(el);
+      }
+    });
+  });
+
+  // Destaque visual de campos preenchidos
+  function markFilled(el){
+    if(!el) return;
+    const tag = el.tagName.toLowerCase();
+    const filled = !!String(el.value||"").trim();
+    el.classList.toggle("filled", filled);
+  }
+  function markCardFilledFromCheckbox(chk){
+    const card = chk.closest(".card");
+    if(card) card.classList.toggle("filledcard", chk.checked);
+  }
+
+  // inicial
+  Array.from(document.querySelectorAll("main.content input, main.content select, main.content textarea")).forEach(markFilled);
+
+  // listeners genéricos
+  Array.from(document.querySelectorAll("main.content input, main.content select, main.content textarea")).forEach(el=>{
+    el.addEventListener("input", ()=>markFilled(el));
+    el.addEventListener("change", ()=>markFilled(el));
+  });
+
+  // quando marcar "prejudicada", marca o card como preenchido
+  ["paPrej","fcPrej","spo2Prej","mrPrej"].forEach(id=>{
+    const chk = document.getElementById(id);
+    if(chk){
+      markCardFilledFromCheckbox(chk);
+      chk.addEventListener("change", ()=>markCardFilledFromCheckbox(chk));
+    }
+  });
 
   $("#saveBtn").onclick = ()=>{
     const next = safeClone(getEval(getDay(dayId), evId));
