@@ -468,6 +468,7 @@ linhas.push(`DATA: ${day?.dateISO||"-"}`);
 function renderEval(app, dayId, evId){
   const day = getDay(dayId);
   const ev = getEval(day, evId);
+  let draft = safeClone(ev);
   if(!day || !ev){
     app.innerHTML = topbar({title:"Avaliação não encontrada", left:btn("←","ghost",`type="button" id="backBtn"`)}) +
       `<main class="content"><div class="muted">Esta avaliação não existe (ou foi excluída).</div></main>`;
@@ -638,10 +639,10 @@ ${section("4) Sinais vitais", `
   });
 
   const apply = (mutate)=>{
-    const next = safeClone(ev);
-    mutate(next);
+    // Mantém um rascunho local atualizado para não perder campos já preenchidos
+    mutate(draft);
     // Atualiza o rascunho SEM re-render completo (evita perder foco a cada tecla)
-    updateEvaluation(day.id, ev.id, next, { render: false });
+    updateEvaluation(day.id, ev.id, draft, { render: false });
   };
 
   $("#protocolo").addEventListener("input", e=>apply(n=>{ n.protocolo=e.target.value; }));  $("#nome").addEventListener("input", e=>apply(n=>{ n.pessoa.nome=e.target.value; }));
