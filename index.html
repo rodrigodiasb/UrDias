@@ -7,10 +7,11 @@
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" href="./favicon.ico" />
   <title>Triagem GU</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css?v=4" />
 </head>
 <body>
   <div id="app"></div>
-  <script type="module" src="./app.js"></script>
+  <!-- cache-bust para evitar tela branca após updates no GitHub Pages -->
+  <script type="module" src="./app.js?v=4"></script>
 </body>
 </html>
