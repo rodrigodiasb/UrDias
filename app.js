@@ -405,17 +405,17 @@ function renderDay(app, dayId){
 
 function generateResumo(day, ev){
   const linhas=[];
-  linhas.push(`PROTOCOLO: ${ev.protocolo||"-"}`);
-  linhas.push(`DATA: ${day?.dateISO||"-"}`);
-  if(day?.viatura) linhas.push(`VIATURA: ${day.viatura}`);
+  linhas.push(`Protocolo: ${ev.protocolo||"-"}`);
+  linhas.push(`Data: ${day?.dateISO ? formatDateBR(day.dateISO) : "-"}`);
+  if(day?.viatura) linhas.push(`Viatura: ${day.viatura}`);
   const integrantes=(day?.integrantesText||"").split("\n").map(x=>x.trim()).filter(Boolean);
-  if(integrantes.length) linhas.push(`GUARNIÇÃO: ${integrantes.join("; ")}`);
+  if(integrantes.length) linhas.push(`Guarnição: ${integrantes.join("; ")}`);
   linhas.push("");
-  linhas.push(`VÍTIMA: ${displayName(ev)}`);
-  linhas.push(`DOCUMENTO: ${ev.pessoa?.documento||"-"}`);
+  linhas.push(`Vítima: ${displayName(ev)}`);
+  linhas.push(`Documento: ${ev.pessoa?.documento||"-"}`);
   const idadeTxt = (ev.pessoa?.idade||"").trim();
-  if(idadeTxt) linhas.push(`IDADE: ${idadeTxt} ano(s)`);
-  if(ev.endereco) linhas.push(`ENDEREÇO: ${ev.endereco}`);
+  if(idadeTxt) linhas.push(`Idade: ${idadeTxt} ano(s)`);
+  if(ev.endereco) linhas.push(`Endereço: ${ev.endereco}`);
   if(ev.gps) linhas.push(`GPS: ${ev.gps}`);
 
   const v=ev.vitais||{};
@@ -438,7 +438,7 @@ function generateResumo(day, ev){
   const gcsFilled = !!String(v.glasgow||"").trim();
   const gcsTxt = gcsFilled ? v.glasgow : "Prejudicada";
   linhas.push("");
-  linhas.push(`SINAIS VITAIS: PA ${paTxt} | FC ${fcTxt} | SpO₂ ${spo2Txt} | MR ${mrTxt} | Glasgow ${gcsTxt}`);
+  linhas.push(`Sinais vitais: PA ${paTxt} | FC ${fcTxt} | SpO₂ ${spo2Txt} | MR ${mrTxt} | Glasgow ${gcsTxt}`);
 
   if(ev.casoClinico){
     linhas.push("");
@@ -449,7 +449,7 @@ function generateResumo(day, ev){
   const reg=ev.regulacao||{};
   if(reg.regulador || reg.senha || reg.unidade){
     linhas.push("");
-    linhas.push("REGULAÇÃO:");
+    linhas.push("Regulação:");
     if(reg.regulador) linhas.push(`- Médico regulador: ${reg.regulador}`);
     if(reg.senha) linhas.push(`- Senha: ${reg.senha}`);
     if(reg.unidade) linhas.push(`- Unidade: ${reg.unidade}`);
@@ -467,7 +467,7 @@ function generateResumo(day, ev){
 
   if(adm.tipo || nomeTxt){
     linhas.push("");
-    linhas.push(`ADMISSÃO PROFISSIONAL: ${cargo}${nomeTxt ? " — " + nomeTxt : ""}`);
+    linhas.push(`Admissão profissional: ${cargo}${nomeTxt ? " — " + nomeTxt : ""}`);
   }
 
   if(adm.macaRetida){
