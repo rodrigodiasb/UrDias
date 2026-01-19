@@ -460,8 +460,8 @@ linhas.push(`DATA: ${day?.dateISO||"-"}`);
       linhas.push(`MACA RETIDA${por} em ${dt}`);
     }
   }
-  }
-  return linhas.join("\n");
+  return linhas.join("
+");
 }
 
 function renderEval(app, dayId, evId){
