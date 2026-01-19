@@ -406,7 +406,7 @@ function renderDay(app, dayId){
 function generateResumo(day, ev){
   const linhas=[];
   linhas.push(`Protocolo: ${ev.protocolo||"-"}`);
-  linhas.push(`Data: ${day?.dateISO ? formatDateBR(day.dateISO) : "-"}`);
+  linhas.push(`Data: ${day?.dateISO||"-"}`);
   if(day?.viatura) linhas.push(`Viatura: ${day.viatura}`);
   const integrantes=(day?.integrantesText||"").split("\n").map(x=>x.trim()).filter(Boolean);
   if(integrantes.length) linhas.push(`Guarnição: ${integrantes.join("; ")}`);
@@ -438,11 +438,16 @@ function generateResumo(day, ev){
   const gcsFilled = !!String(v.glasgow||"").trim();
   const gcsTxt = gcsFilled ? v.glasgow : "Prejudicada";
   linhas.push("");
-  linhas.push(`Sinais vitais: PA ${paTxt} | FC ${fcTxt} | SpO₂ ${spo2Txt} | MR ${mrTxt} | Glasgow ${gcsTxt}`);
+  linhas.push("Sinais vitais:");
+  linhas.push(`- PA: ${paTxt}`);
+  linhas.push(`- FC: ${fcTxt}${fcTxt !== "Prejudicada" ? " bpm" : ""}`);
+  linhas.push(`- SpO₂: ${spo2Txt}`);
+  linhas.push(`- MR: ${mrTxt}${mrTxt !== "Prejudicada" ? " irpm" : ""}`);
+  linhas.push(`- Glasgow: ${gcsTxt}`);
 
   if(ev.casoClinico){
     linhas.push("");
-    linhas.push("EVOLUÇÃO:");
+    linhas.push("Evolução:");
     linhas.push(ev.casoClinico);
   }
 
