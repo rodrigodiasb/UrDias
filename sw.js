@@ -1,4 +1,4 @@
-const CACHE = "triagem-gu-static-v1";
+const CACHE = "triagem-gu-static-v3";
 const ASSETS = [
   "./",
   "./index.html",

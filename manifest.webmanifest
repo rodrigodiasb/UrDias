@@ -1,7 +1,7 @@
 {
   "name": "Triagem GU (offline)",
   "short_name": "Triagem GU",
-  "description": "Coleta offline de dados de atendimentos (triagem) para guarni\u00e7\u00e3o.",
+  "description": "Coleta offline de dados de atendimentos (triagem) para guarnição.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

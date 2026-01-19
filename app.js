@@ -24,6 +24,9 @@ function normalizeForSearch(s=""){
 function debounce(fn, ms=450){
   let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); };
 }
+function safeClone(obj){
+  try{ return structuredClone(obj); }catch{ return JSON.parse(JSON.stringify(obj)); }
+}
 
 // CPF validation + mask
 function isValidCPF(input){
@@ -49,13 +52,9 @@ function maskCPF(input){
   return `${cpf.slice(0,3)}.${cpf.slice(3,6)}.${cpf.slice(6,9)}-${cpf.slice(9,11)}`;
 }
 
-function safeClone(obj){
-  try{ return structuredClone(obj); }catch{ return JSON.parse(JSON.stringify(obj)); }
-}
-
 /* ---------------- state ---------------- */
 const defaultState = () => ({
-  version: 1,
+  version: 3,
   lastSavedAt: null,
   days: [],
   favorites: { reguladores: [], unidades: [] }
@@ -67,14 +66,13 @@ let HYDRATED = false;
 const persist = debounce(async ()=>{
   STATE.lastSavedAt = Date.now();
   await saveState(STATE);
-}, 500);
+}, 450);
 
 async function init(){
   const loaded = await loadState();
   if(loaded) STATE = loaded;
   HYDRATED = true;
 
-  // register SW
   if("serviceWorker" in navigator){
     navigator.serviceWorker.register("./sw.js").catch(()=>{});
   }
@@ -87,11 +85,12 @@ async function init(){
   render();
 }
 
-function setState(mutator, opts={ render: true }){
+function setState(mutator, opts={ render:true }){
   mutator(STATE);
   persist();
   if(opts.render) render();
 }
+
 function getDay(dayId){ return (STATE.days||[]).find(d=>d.id===dayId); }
 function getEval(day, evId){ return (day?.evaluations||[]).find(e=>e.id===evId); }
 
@@ -114,7 +113,6 @@ function createDay({viatura, integrantesText, dateISO}){
   setState(s => { s.days = [day, ...(s.days||[])]; });
   return day.id;
 }
-
 function deleteDay(dayId){
   setState(s => { s.days = (s.days||[]).filter(d=>d.id!==dayId); });
 }
@@ -122,14 +120,16 @@ function deleteDay(dayId){
 function createEvaluation(dayId){
   const ev = {
     id: uid("ev"),
-    status: "draft",
+    status: "draft", // draft | saved
     createdAt: Date.now(),
     updatedAt: Date.now(),
+
     protocolo: "",
-pessoa: { nome:"", documento:"", nascimento:"", idade:"" },
+    pessoa: { nome:"", documento:"", nascimento:"", idade:"" },
     docTipo: "documento",
     endereco: "",
     gps: "",
+
     vitais: {
       pa: { prejudicada:false, pas:"", pad:"" },
       fc: { prejudicada:false, valor:"" },
@@ -137,10 +137,20 @@ pessoa: { nome:"", documento:"", nascimento:"", idade:"" },
       mr: { prejudicada:false, valor:"" },
       glasgow: ""
     },
-    casoClinico: "",
+
+    casoClinico: "", // label: Evolução
+
     regulacao: { regulador:"", senha:"", unidade:"" },
-    admissao: { tipo:"", nome:"", macaRetida:false, dataHora:"" }
+
+    admissao: {
+      tipo:"",            // medico | enfermeiro
+      genero:"",          // m | f
+      nome:"",
+      macaRetida:false,
+      dataHora:""
+    }
   };
+
   setState(s=>{
     const d = (s.days||[]).find(x=>x.id===dayId);
     if(!d) return;
@@ -150,15 +160,15 @@ pessoa: { nome:"", documento:"", nascimento:"", idade:"" },
   return ev.id;
 }
 
-function updateEvaluation(dayId, evId, nextEv, opts={ render: true }){
+function updateEvaluation(dayId, evId, nextEv, opts={ render:true }){
   setState(s=>{
     const d = (s.days||[]).find(x=>x.id===dayId);
     if(!d) return;
-    d.evaluations = (d.evaluations||[]).map(e=> e.id===evId ? (nextEv.updatedAt=Date.now(), nextEv) : e);
+    nextEv.updatedAt = Date.now();
+    d.evaluations = (d.evaluations||[]).map(e=> e.id===evId ? nextEv : e);
     d.updatedAt = Date.now();
   }, opts);
 }
-
 function deleteEvaluation(dayId, evId){
   setState(s=>{
     const d = (s.days||[]).find(x=>x.id===dayId);
@@ -200,8 +210,8 @@ function field(label, control, hint=""){ return `
   </div>
   `; 
 }
-function section(title, body, open=false){
-  return `<details class="section" open open>
+function section(title, body){
+  return `<details class="section" open>
     <summary>${escapeHTML(title)}</summary>
     <div class="section-body">${body}</div>
   </details>`;
@@ -303,7 +313,7 @@ function showNewDayModal(){
         ${btn("✕","ghost",`id="closeModalBtn" type="button"`)}
       </div>
       <div class="modal-body">
-        ${field("Viatura", `<input class="input" id="viatura" placeholder="Ex.: UR-12 / ASU-01 / Bravo 03" />`)}
+        ${field("Viatura", `<input class="input" id="viatura" placeholder="Ex.: UR-12 / ASU-01" />`)}
         ${field("Integrantes (1 por linha)",
           `<textarea class="textarea" id="integrantes" rows="5" placeholder="Digite um nome por linha..."></textarea>`,
           `Ex.: Rodrigo Dias Batista ↵ Lidiane Batista Sousa ↵ Américo Gonçalves`
@@ -372,12 +382,12 @@ function renderDay(app, dayId){
       return;
     }
     listEl.innerHTML = list.map(ev=>{
-      const st = ev.status==="final" ? pill("FINAL","ok") : pill("DRAFT","draft");
+      const st = ev.status==="saved" ? pill("FINAL","ok") : pill("DRAFT","draft");
       return card(`
         <div class="row space">
           <div>
             <div class="title">${escapeHTML(ev.protocolo||"Sem protocolo")} — ${escapeHTML(displayName(ev))}</div>
-            <div class="muted">${ev.status==="final"?"✅ Salva":"📝 Rascunho"}${ev.regulacao?.unidade?` • ${escapeHTML(ev.regulacao.unidade)}`:""}</div>
+            <div class="muted">${ev.status==="saved"?"✅ Salva":"📝 Rascunho"}${ev.regulacao?.unidade?` • ${escapeHTML(ev.regulacao.unidade)}`:""}</div>
           </div>
           ${st}
         </div>
@@ -396,7 +406,7 @@ function renderDay(app, dayId){
 function generateResumo(day, ev){
   const linhas=[];
   linhas.push(`PROTOCOLO: ${ev.protocolo||"-"}`);
-linhas.push(`DATA: ${day?.dateISO||"-"}`);
+  linhas.push(`DATA: ${day?.dateISO||"-"}`);
   if(day?.viatura) linhas.push(`VIATURA: ${day.viatura}`);
   const integrantes=(day?.integrantesText||"").split("\n").map(x=>x.trim()).filter(Boolean);
   if(integrantes.length) linhas.push(`GUARNIÇÃO: ${integrantes.join("; ")}`);
@@ -405,7 +415,6 @@ linhas.push(`DATA: ${day?.dateISO||"-"}`);
   linhas.push(`DOCUMENTO: ${ev.pessoa?.documento||"-"}`);
   const idadeTxt = (ev.pessoa?.idade||"").trim();
   if(idadeTxt) linhas.push(`IDADE: ${idadeTxt} ano(s)`);
-
   if(ev.endereco) linhas.push(`ENDEREÇO: ${ev.endereco}`);
   if(ev.gps) linhas.push(`GPS: ${ev.gps}`);
 
@@ -433,7 +442,7 @@ linhas.push(`DATA: ${day?.dateISO||"-"}`);
 
   if(ev.casoClinico){
     linhas.push("");
-    linhas.push("CASO CLÍNICO:");
+    linhas.push("EVOLUÇÃO:");
     linhas.push(ev.casoClinico);
   }
 
@@ -448,26 +457,30 @@ linhas.push(`DATA: ${day?.dateISO||"-"}`);
 
   const adm=ev.admissao||{};
   if(adm.macaRetida===undefined && adm.marcaRetida!==undefined) adm.macaRetida = adm.marcaRetida;
-  if(adm.tipo || adm.nome || adm.macaRetida){
-    linhas.push("");
-    const tipoTxt = adm.tipo==="medico" ? "Médico(a)" : adm.tipo==="enfermeiro" ? "Enfermeiro(a)" : "Profissional";
-    const nomeTxt = (adm.nome||"").trim();
-    linhas.push(`ADMISSÃO PROFISSIONAL: ${tipoTxt}${nomeTxt ? " — " + nomeTxt : ""}`);
 
-    if(adm.macaRetida){
-      const dt = adm.dataHora ? formatDateTimeBR(adm.dataHora) : "-";
-      const por = nomeTxt ? ` por ${tipoTxt} ${nomeTxt}` : "";
-      linhas.push(`MACA RETIDA${por} em ${dt}`);
-    }
+  const nomeTxt = (adm.nome||"").trim();
+  const genero = adm.genero || ""; // m|f
+  const cargo = adm.tipo==="medico" ? (genero==="f" ? "Médica" : "Médico")
+              : adm.tipo==="enfermeiro" ? (genero==="f" ? "Enfermeira" : "Enfermeiro")
+              : "Profissional";
+  const prep = genero==="f" ? "pela" : "pelo";
+
+  if(adm.tipo || nomeTxt){
+    linhas.push("");
+    linhas.push(`ADMISSÃO PROFISSIONAL: ${cargo}${nomeTxt ? " — " + nomeTxt : ""}`);
   }
-  return linhas.join("
-");
+
+  if(adm.macaRetida){
+    const dt = adm.dataHora ? formatDateTimeBR(adm.dataHora) : "-";
+    linhas.push(`MACA RETIDA ${prep} ${cargo}${nomeTxt ? " " + nomeTxt : ""} em ${dt}`);
+  }
+
+  return linhas.join("\n");
 }
 
 function renderEval(app, dayId, evId){
   const day = getDay(dayId);
   const ev = getEval(day, evId);
-  let draft = safeClone(ev);
   if(!day || !ev){
     app.innerHTML = topbar({title:"Avaliação não encontrada", left:btn("←","ghost",`type="button" id="backBtn"`)}) +
       `<main class="content"><div class="muted">Esta avaliação não existe (ou foi excluída).</div></main>`;
@@ -475,13 +488,15 @@ function renderEval(app, dayId, evId){
     return;
   }
 
+  let draft = safeClone(ev);
+
   const left = btn("←","ghost",`type="button" id="backBtn"`);
   const right = btn("🧾 Resumo","ghost",`type="button" id="resumoBtn"`);
   app.innerHTML = topbar({title:`${ev.protocolo||"Sem protocolo"} — ${displayName(ev)}`, left, right}) + `
     <main class="content">
       <div class="autosave">
         <div class="row"><span class="dot"></span><span class="muted">Salvamento automático (offline)</span></div>
-        ${ev.status==="final"?pill("FINAL","ok"):pill("DRAFT","draft")}
+        ${ev.status==="saved"?pill("FINAL","ok"):pill("DRAFT","draft")}
       </div>
 
       ${section("1) Informações gerais", `
@@ -491,7 +506,7 @@ function renderEval(app, dayId, evId){
           <div class="muted" id="gpsLabel">${ev.gps?escapeHTML("GPS: "+ev.gps):"Sem GPS registrado."}</div>
           ${btn("📍 Usar GPS","",`type="button" id="gpsBtn"`)}
         </div>
-      `, true)}
+      `)}
 
       ${section("2) Dados pessoais", `
         ${field("Nome da vítima", `<input class="input" id="nome" placeholder="Nome completo (se houver)" />`,
@@ -500,23 +515,21 @@ function renderEval(app, dayId, evId){
         ${field("CPF ou Documento", `<input class="input" id="doc" placeholder="CPF (11 dígitos) ou outro documento" />`,
           `<span id="docHint" class="hint">Detectado: Documento.</span>`
         )}
-
         <div class="grid2">
           <div class="card">
             <div class="title">Data de nascimento</div>
             <input class="input" type="date" id="nasc" />
             <div class="muted" style="margin-top:6px">Ao preencher, a idade é calculada automaticamente.</div>
           </div>
-
           <div class="card">
             <div class="title">Idade</div>
             <input class="input" id="idade" inputmode="numeric" placeholder="anos" />
             <div class="muted" style="margin-top:6px">Se preencher a idade, a data de nascimento fica opcional.</div>
           </div>
         </div>
-      `, false)}
+      `)}
 
-${section("4) Sinais vitais", `
+      ${section("3) Sinais vitais", `
         <div class="grid2">
           <div class="card">
             <div class="title">PA (Pressão arterial)</div>
@@ -553,31 +566,37 @@ ${section("4) Sinais vitais", `
             ${Array.from({length:15},(_,i)=>15-i).map(n=>`<option value="${n}">${n}</option>`).join("")}
           </select>
         `)}
-      `, false)}
+      `)}
 
-      ${section("5) Evolução", `
-        ${field("Descrição", `<textarea class="textarea" id="casoClinico" rows="6" placeholder="Descreva o caso (o campo cresce conforme você digita)…"></textarea>`)}
-      `, false)}
+      ${section("4) Evolução", `
+        ${field("Evolução", `<textarea class="textarea" id="casoClinico" rows="6" placeholder="Descreva a evolução (o campo cresce conforme você digita)…"></textarea>`)}
+      `)}
 
-      ${section("6) Regulação", `
+      ${section("5) Regulação", `
         ${favoriteField("Médico regulador","regulador","reguladores","regulador")}
         ${field("Senha", `<input class="input" id="senha" placeholder="Senha/regulação" />`)}
         ${favoriteField("Unidade de saúde","unidade","unidades","unidade")}
-      `, false)}
+      `)}
 
-      ${section("7) Admissão", `
+      ${section("6) Admissão", `
         ${field("Quem admitiu?", `
           <div class="seg">
             <button type="button" id="admMed">Médico</button>
             <button type="button" id="admEnf">Enfermeiro</button>
           </div>
         `)}
+        ${field("Gênero do profissional", `
+          <div class="seg">
+            <button type="button" id="genM">Masculino</button>
+            <button type="button" id="genF">Feminino</button>
+          </div>
+        `)}
         ${field("Nome de quem admitiu", `<input class="input" id="admNome" placeholder="Nome do profissional" />`)}
-        <label class="check"><input type="checkbox" id="marcaRetida" /> <span>Maca retida</span></label>
-        <div id="marcaWrap" style="display:none">
-          ${field("Data/hora da marca retida", `<input class="input" type="datetime-local" id="marcaDT" />`)}
+        <label class="check"><input type="checkbox" id="macaRetida" /> <span>Maca retida</span></label>
+        <div id="macaWrap" style="display:none">
+          ${field("Data/hora da maca retida", `<input class="input" type="datetime-local" id="macaDT" />`)}
         </div>
-      `, false)}
+      `)}
 
       <div class="footerbar">
         ${btn("Salvar avaliação","primary",`type="button" id="saveBtn"`)}
@@ -593,14 +612,16 @@ ${section("4) Sinais vitais", `
   `;
 
   $("#backBtn").onclick = ()=>location.hash = `#/day/${day.id}`;
-  $("#resumoBtn").onclick = ()=>showResumoModal(day, ev);
+  $("#resumoBtn").onclick = ()=>showResumoModal(day, getEval(getDay(dayId), evId) || draft);
 
   // set initial values
-  $("#protocolo").value = ev.protocolo||"";  $("#nome").value = ev.pessoa?.nome||"";
+  $("#protocolo").value = ev.protocolo||"";
+  $("#nome").value = ev.pessoa?.nome||"";
   $("#doc").value = ev.pessoa?.documento||"";
   $("#nasc").value = ev.pessoa?.nascimento||"";
   $("#idade").value = ev.pessoa?.idade||"";
   $("#endereco").value = ev.endereco||"";
+  $("#casoClinico").value = ev.casoClinico||"";
 
   $("#pas").value = ev.vitais?.pa?.pas||"";
   $("#pad").value = ev.vitais?.pa?.pad||"";
@@ -616,20 +637,48 @@ ${section("4) Sinais vitais", `
   $("#mrPrej").checked = !!ev.vitais?.mr?.prejudicada;
 
   $("#glasgow").value = ev.vitais?.glasgow||"";
-  $("#casoClinico").value = ev.casoClinico||"";
-
   $("#senha").value = ev.regulacao?.senha||"";
   $("#fav_regulador_input").value = ev.regulacao?.regulador||"";
   $("#fav_unidade_input").value = ev.regulacao?.unidade||"";
 
-  // admission
-  setAdmButtons(ev.admissao?.tipo||"");
-  $("#admNome").value = ev.admissao?.nome||"";
-  $("#marcaRetida").checked = !!ev.admissao?.macaRetida;
-  $("#marcaDT").value = ev.admissao?.dataHora || "";
-  $("#marcaWrap").style.display = $("#marcaRetida").checked ? "block" : "none";
+  const adm = ev.admissao || {};
+  const macaFlag = (adm.macaRetida!==undefined) ? adm.macaRetida : !!adm.marcaRetida;
+  $("#macaRetida").checked = !!macaFlag;
+  $("#macaDT").value = adm.dataHora || "";
+  $("#macaWrap").style.display = $("#macaRetida").checked ? "block" : "none";
+  $("#admNome").value = adm.nome || "";
+  setAdmButtons(adm.tipo || "");
+  setGeneroButtons(adm.genero || "");
 
-  // auto-grow case
+  // Keep a fresh draft baseline after setting UI
+  draft = safeClone(getEval(getDay(dayId), evId) || ev);
+
+  const apply = (mutate)=>{
+    mutate(draft);
+    updateEvaluation(day.id, ev.id, draft, { render:false });
+  };
+
+  // CPF/doc logic
+  $("#doc").addEventListener("input", e=>{
+    const raw = e.target.value;
+    const digits = onlyDigits(raw);
+    if(digits.length===11 && isValidCPF(digits)){
+      const masked = maskCPF(digits);
+      e.target.value = masked;
+      $("#docHint").textContent = "Detectado: CPF válido (formatado automaticamente).";
+      apply(n=>{ n.pessoa.documento=masked; n.docTipo="cpf"; });
+    }else{
+      $("#docHint").textContent = "Detectado: Documento.";
+      apply(n=>{ n.pessoa.documento=raw; n.docTipo="documento"; });
+    }
+  });
+
+  $("#protocolo").addEventListener("input", e=>apply(n=>{ n.protocolo=e.target.value; }));
+  $("#nome").addEventListener("input", e=>apply(n=>{ n.pessoa.nome=e.target.value; }));
+  $("#endereco").addEventListener("input", e=>apply(n=>{ n.endereco=e.target.value; }));
+  $("#casoClinico").addEventListener("input", e=>apply(n=>{ n.casoClinico=e.target.value; }));
+
+  // Auto-grow Evolução
   $("#casoClinico").addEventListener("input", ()=>{
     const el=$("#casoClinico");
     const lines = el.value.split("\n").length;
@@ -637,16 +686,7 @@ ${section("4) Sinais vitais", `
     el.rows = est;
   });
 
-  const apply = (mutate)=>{
-    // Mantém um rascunho local atualizado para não perder campos já preenchidos
-    mutate(draft);
-    // Atualiza o rascunho SEM re-render completo (evita perder foco a cada tecla)
-    updateEvaluation(day.id, ev.id, draft, { render: false });
-  };
-
-  $("#protocolo").addEventListener("input", e=>apply(n=>{ n.protocolo=e.target.value; }));  $("#nome").addEventListener("input", e=>apply(n=>{ n.pessoa.nome=e.target.value; }));
-
-  // nascimento / idade (sincronização simples)
+  // nascimento/idade
   function calcIdade(iso){
     if(!iso) return "";
     const [y,m,d] = iso.split("-").map(Number);
@@ -664,66 +704,27 @@ ${section("4) Sinais vitais", `
     const nascVal = ($("#nasc").value || "").trim();
     $("#nasc").disabled = !!(idadeVal && !nascVal);
   }
-
   $("#nasc").addEventListener("input", e=>{
     const iso = e.target.value;
     const idade = calcIdade(iso);
-    if(idade){
-      $("#idade").value = idade;
-    }
+    if(idade) $("#idade").value = idade;
     apply(n=>{ n.pessoa.nascimento = iso; n.pessoa.idade = idade || ""; });
     syncDobAgeUI();
   });
-
   $("#idade").addEventListener("input", e=>{
     const v = e.target.value.replace(/\D+/g,"").slice(0,3);
     e.target.value = v;
     if(v){
-      if($("#nasc").value){
-        $("#nasc").value = "";
-      }
+      if($("#nasc").value) $("#nasc").value = "";
       apply(n=>{ n.pessoa.idade = v; n.pessoa.nascimento = ""; });
     }else{
       apply(n=>{ n.pessoa.idade = ""; });
     }
     syncDobAgeUI();
   });
-
   syncDobAgeUI();
 
-
-  $("#doc").addEventListener("input", e=>{
-    const raw = e.target.value;
-    const digits = onlyDigits(raw);
-    if(digits.length===11 && isValidCPF(digits)){
-      const masked = maskCPF(digits);
-      e.target.value = masked;
-      $("#docHint").textContent = "Detectado: CPF válido (formatado automaticamente).";
-      apply(n=>{ n.pessoa.documento=masked; n.docTipo="cpf"; });
-    }else{
-      $("#docHint").textContent = "Detectado: Documento.";
-      apply(n=>{ n.pessoa.documento=raw; n.docTipo="documento"; });
-    }
-  });
-
-  $("#endereco").addEventListener("input", e=>apply(n=>{ n.endereco=e.target.value; }));
-
-  $("#gpsBtn").onclick = ()=>{
-    if(!navigator.geolocation){ setToast("GPS não disponível."); return; }
-    navigator.geolocation.getCurrentPosition(
-      pos=>{
-        const {latitude, longitude, accuracy} = pos.coords;
-        const gps = `${latitude.toFixed(6)}, ${longitude.toFixed(6)} (±${Math.round(accuracy)}m)`;
-        $("#gpsLabel").textContent = `GPS: ${gps}`;
-        apply(n=>{ n.gps=gps; });
-        setToast("GPS registrado.");
-      },
-      ()=>setToast("Não foi possível obter GPS."),
-      { enableHighAccuracy:true, timeout:8000, maximumAge:60000 }
-    );
-  };
-
-  // vitals
+  // vitais disable if prejudicada
   const syncPrej = ()=>{
     $("#pas").disabled = $("#paPrej").checked;
     $("#pad").disabled = $("#paPrej").checked;
@@ -748,9 +749,7 @@ ${section("4) Sinais vitais", `
 
   $("#glasgow").addEventListener("change", e=>apply(n=>{ n.vitais.glasgow=e.target.value; }));
 
-  $("#casoClinico").addEventListener("input", e=>apply(n=>{ n.casoClinico=e.target.value; }));
-
-  // favorites fields
+  // favorites + regulacao
   wireFavoriteField("regulador", "reguladores",
     ()=> (getEval(getDay(dayId), evId)?.regulacao?.regulador||""),
     (val)=>apply(n=>{ n.regulacao.regulador=val; })
@@ -762,22 +761,49 @@ ${section("4) Sinais vitais", `
   );
 
   // admission
+  $("#admNome").addEventListener("input", e=>apply(n=>{ n.admissao.nome=e.target.value; }));
+
   $("#admMed").onclick = ()=>{ apply(n=>{ n.admissao.tipo="medico"; }); setAdmButtons("medico"); };
   $("#admEnf").onclick = ()=>{ apply(n=>{ n.admissao.tipo="enfermeiro"; }); setAdmButtons("enfermeiro"); };
-  $("#admNome").addEventListener("input", e=>apply(n=>{ n.admissao.nome=e.target.value; }));
-  $("#marcaRetida").addEventListener("change", e=>{
+
+  $("#genM").onclick = ()=>{ apply(n=>{ n.admissao.genero="m"; }); setGeneroButtons("m"); };
+  $("#genF").onclick = ()=>{ apply(n=>{ n.admissao.genero="f"; }); setGeneroButtons("f"); };
+
+  $("#macaRetida").addEventListener("change", e=>{
     const checked = e.target.checked;
-    $("#marcaWrap").style.display = checked ? "block" : "none";
+    $("#macaWrap").style.display = checked ? "block" : "none";
     apply(n=>{
       n.admissao.macaRetida = checked;
       if(checked && !n.admissao.dataHora) n.admissao.dataHora = nowLocalISODateTime();
     });
-    if(checked) $("#marcaDT").value = getEval(getDay(dayId), evId)?.admissao?.dataHora || nowLocalISODateTime();
+    if(checked) $("#macaDT").value = (getEval(getDay(dayId), evId)?.admissao?.dataHora || nowLocalISODateTime());
   });
-  $("#marcaDT").addEventListener("input", e=>apply(n=>{ n.admissao.dataHora=e.target.value; }));
+  $("#macaDT").addEventListener("input", e=>apply(n=>{ n.admissao.dataHora=e.target.value; }));
 
+  $("#gpsBtn").onclick = ()=>{
+    if(!navigator.geolocation){ setToast("GPS não disponível."); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos=>{
+        const {latitude, longitude, accuracy} = pos.coords;
+        const gps = `${latitude.toFixed(6)}, ${longitude.toFixed(6)} (±${Math.round(accuracy)}m)`;
+        $("#gpsLabel").textContent = `GPS: ${gps}`;
+        apply(n=>{ n.gps=gps; });
+        setToast("GPS registrado.");
+      },
+      ()=>setToast("Não foi possível obter GPS."),
+      { enableHighAccuracy:true, timeout:8000, maximumAge:60000 }
+    );
+  };
 
-  // Enter/Retorno no iOS: ir para o próximo campo (exceto textarea do Caso clínico)
+  $("#saveBtn").onclick = ()=>{
+    draft.status = "saved";
+    updateEvaluation(day.id, ev.id, draft, { render:true });
+    setToast("Avaliação salva.");
+  };
+
+  wireHoldToDelete(()=>{ deleteEvaluation(day.id, ev.id); location.hash = `#/day/${day.id}`; });
+
+  // enter => next (except textarea)
   function isVisible(el){
     return !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
   }
@@ -792,7 +818,6 @@ ${section("4) Sinais vitais", `
       try{ focusables[idx+1].select?.(); }catch{}
     }
   }
-  // Aplica comportamento Enter => próximo (exceto textarea)
   Array.from(document.querySelectorAll("main.content input, main.content select")).forEach(el=>{
     el.setAttribute("enterkeyhint","next");
     el.addEventListener("keydown", (e)=>{
@@ -803,10 +828,9 @@ ${section("4) Sinais vitais", `
     });
   });
 
-  // Destaque visual de campos preenchidos
+  // filled highlight
   function markFilled(el){
     if(!el) return;
-    const tag = el.tagName.toLowerCase();
     const filled = !!String(el.value||"").trim();
     el.classList.toggle("filled", filled);
   }
@@ -814,17 +838,11 @@ ${section("4) Sinais vitais", `
     const card = chk.closest(".card");
     if(card) card.classList.toggle("filledcard", chk.checked);
   }
-
-  // inicial
   Array.from(document.querySelectorAll("main.content input, main.content select, main.content textarea")).forEach(markFilled);
-
-  // listeners genéricos
   Array.from(document.querySelectorAll("main.content input, main.content select, main.content textarea")).forEach(el=>{
     el.addEventListener("input", ()=>markFilled(el));
     el.addEventListener("change", ()=>markFilled(el));
   });
-
-  // quando marcar "prejudicada", marca o card como preenchido
   ["paPrej","fcPrej","spo2Prej","mrPrej"].forEach(id=>{
     const chk = document.getElementById(id);
     if(chk){
@@ -833,18 +851,13 @@ ${section("4) Sinais vitais", `
     }
   });
 
-  $("#saveBtn").onclick = ()=>{
-    const next = safeClone(getEval(getDay(dayId), evId));
-    next.status = "final";
-    updateEvaluation(day.id, ev.id, next, { render: true });
-    setToast("Avaliação salva.");
-  };
-
-  wireHoldToDelete(()=>{ deleteEvaluation(day.id, ev.id); location.hash = `#/day/${day.id}`; });
-
   function setAdmButtons(tipo){
     $("#admMed").classList.toggle("on", tipo==="medico");
     $("#admEnf").classList.toggle("on", tipo==="enfermeiro");
+  }
+  function setGeneroButtons(gen){
+    $("#genM").classList.toggle("on", gen==="m");
+    $("#genF").classList.toggle("on", gen==="f");
   }
 }
 
@@ -925,15 +938,15 @@ function showResumoModal(day, ev){
     <div class="modal" role="dialog" aria-modal="true">
       <div class="modal-header">
         <div class="modal-title">Resumo (copiar para BO)</div>
-        ${btn("✕","ghost",`id="closeResumo" type="button"`)}
+        <button class="btn ghost" id="closeResumo" type="button">✕</button>
       </div>
       <div class="modal-body">
         <textarea class="textarea" id="resumoTA" rows="18" readonly>${escapeHTML(text)}</textarea>
         <div class="muted" style="margin-top:8px">Dica: você pode copiar e colar no boletim/relatório depois.</div>
       </div>
       <div class="modal-footer">
-        ${btn("Fechar","ghost",`id="fecharResumo" type="button"`)}
-        ${btn("Copiar","primary",`id="copyResumo" type="button"`)}
+        <button class="btn ghost" id="fecharResumo" type="button">Fechar</button>
+        <button class="btn primary" id="copyResumo" type="button">Copiar</button>
       </div>
     </div>
   `);
@@ -952,5 +965,4 @@ function showResumoModal(day, ev){
   };
 }
 
-/* start */
 init();
