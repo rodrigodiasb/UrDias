@@ -406,16 +406,16 @@ function renderDay(app, dayId){
 function generateResumo(day, ev){
   const linhas=[];
   linhas.push(`Protocolo: ${ev.protocolo||"-"}`);
-  linhas.push(`Data: ${day?.dateISO||"-"}`);
-  if(day?.viatura) linhas.push(`Viatura: ${day.viatura}`);
-  const integrantes=(day?.integrantesText||"").split("\n").map(x=>x.trim()).filter(Boolean);
-  if(integrantes.length) linhas.push(`Guarnição: ${integrantes.join("; ")}`);
-  linhas.push("");
+  if(ev.endereco) linhas.push(`Endereço: ${ev.endereco}`);
+linhas.push(`Data: ${day?.dateISO ? formatDateBR(day.dateISO) : "-"}`);
+
+// linha em branco de separação
+linhas.push("");
+  
   linhas.push(`Vítima: ${displayName(ev)}`);
   linhas.push(`Documento: ${ev.pessoa?.documento||"-"}`);
   const idadeTxt = (ev.pessoa?.idade||"").trim();
   if(idadeTxt) linhas.push(`Idade: ${idadeTxt} ano(s)`);
-  if(ev.endereco) linhas.push(`Endereço: ${ev.endereco}`);
   if(ev.gps) linhas.push(`GPS: ${ev.gps}`);
 
   const v=ev.vitais||{};
