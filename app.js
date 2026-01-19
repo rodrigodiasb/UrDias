@@ -139,7 +139,7 @@ pessoa: { nome:"", documento:"", nascimento:"", idade:"" },
     },
     casoClinico: "",
     regulacao: { regulador:"", senha:"", unidade:"" },
-    admissao: { tipo:"", nome:"", marcaRetida:false, dataHora:"" }
+    admissao: { tipo:"", nome:"", macaRetida:false, dataHora:"" }
   };
   setState(s=>{
     const d = (s.days||[]).find(x=>x.id===dayId);
@@ -201,7 +201,7 @@ function field(label, control, hint=""){ return `
   `; 
 }
 function section(title, body, open=false){
-  return `<details class="section" ${open?"open":""} ${open?"open":""}>
+  return `<details class="section" open open>
     <summary>${escapeHTML(title)}</summary>
     <div class="section-body">${body}</div>
   </details>`;
@@ -447,20 +447,19 @@ linhas.push(`DATA: ${day?.dateISO||"-"}`);
   }
 
   const adm=ev.admissao||{};
-  if(adm.tipo || adm.nome || adm.marcaRetida){
+  if(adm.macaRetida===undefined && adm.marcaRetida!==undefined) adm.macaRetida = adm.marcaRetida;
+  if(adm.tipo || adm.nome || adm.macaRetida){
     linhas.push("");
-    // Montagem conforme rádio (médico/enfermeiro). "(a)" cobre ambos os sexos.
     const tipoTxt = adm.tipo==="medico" ? "Médico(a)" : adm.tipo==="enfermeiro" ? "Enfermeiro(a)" : "Profissional";
     const nomeTxt = (adm.nome||"").trim();
     linhas.push(`ADMISSÃO PROFISSIONAL: ${tipoTxt}${nomeTxt ? " — " + nomeTxt : ""}`);
 
-    if(adm.marcaRetida){
+    if(adm.macaRetida){
       const dt = adm.dataHora ? formatDateTimeBR(adm.dataHora) : "-";
       const por = nomeTxt ? ` por ${tipoTxt} ${nomeTxt}` : "";
-      linhas.push(`MACA RETIDA: SIM${por} em ${dt}`);
-    }else{
-      linhas.push("MACA RETIDA: NÃO");
+      linhas.push(`MACA RETIDA${por} em ${dt}`);
     }
+  }
   }
   return linhas.join("\n");
 }
@@ -556,7 +555,7 @@ ${section("4) Sinais vitais", `
         `)}
       `, false)}
 
-      ${section("5) Caso clínico", `
+      ${section("5) Evolução", `
         ${field("Descrição", `<textarea class="textarea" id="casoClinico" rows="6" placeholder="Descreva o caso (o campo cresce conforme você digita)…"></textarea>`)}
       `, false)}
 
@@ -574,7 +573,7 @@ ${section("4) Sinais vitais", `
           </div>
         `)}
         ${field("Nome de quem admitiu", `<input class="input" id="admNome" placeholder="Nome do profissional" />`)}
-        <label class="check"><input type="checkbox" id="marcaRetida" /> <span>Marca retida</span></label>
+        <label class="check"><input type="checkbox" id="marcaRetida" /> <span>Maca retida</span></label>
         <div id="marcaWrap" style="display:none">
           ${field("Data/hora da marca retida", `<input class="input" type="datetime-local" id="marcaDT" />`)}
         </div>
@@ -626,7 +625,7 @@ ${section("4) Sinais vitais", `
   // admission
   setAdmButtons(ev.admissao?.tipo||"");
   $("#admNome").value = ev.admissao?.nome||"";
-  $("#marcaRetida").checked = !!ev.admissao?.marcaRetida;
+  $("#marcaRetida").checked = !!ev.admissao?.macaRetida;
   $("#marcaDT").value = ev.admissao?.dataHora || "";
   $("#marcaWrap").style.display = $("#marcaRetida").checked ? "block" : "none";
 
@@ -770,7 +769,7 @@ ${section("4) Sinais vitais", `
     const checked = e.target.checked;
     $("#marcaWrap").style.display = checked ? "block" : "none";
     apply(n=>{
-      n.admissao.marcaRetida = checked;
+      n.admissao.macaRetida = checked;
       if(checked && !n.admissao.dataHora) n.admissao.dataHora = nowLocalISODateTime();
     });
     if(checked) $("#marcaDT").value = getEval(getDay(dayId), evId)?.admissao?.dataHora || nowLocalISODateTime();
