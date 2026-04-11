@@ -112,7 +112,7 @@ function maskCPF(input){
 }
 /* ---------------- state ---------------- */
 const defaultState = () => ({
-  version: 12,
+  version: 14,
   lastSavedAt: null,
   days: [],
   favorites: { reguladores: [], unidades: [] }
@@ -142,7 +142,7 @@ function isQtoViatura(viatura=""){
     v.startsWith(prefix + "-") ||
     v.startsWith(prefix + " ") ||
     v.startsWith(prefix + "_") ||
-    new RegExp(`^${prefix}\d`).test(v)
+    new RegExp(`^${prefix}\\d`).test(v)
   ));
 }
 function ensureQtoShape(qto={}){
@@ -235,7 +235,7 @@ function normalizeState(state){
       unidades: state?.favorites?.unidades || []
     }
   };
-  next.version = 12;
+  next.version = 14;
   next.days = (state?.days || []).map(day => ({
     ...day,
     evaluations: (day.evaluations || []).map(ensureEvaluationShape),
@@ -253,7 +253,7 @@ async function init(){
   const loaded = await loadState();
   if(loaded){
     STATE = normalizeState(loaded);
-    if((loaded.version || 0) < 12) saveState(STATE).catch(()=>{});
+    if((loaded.version || 0) < 14) saveState(STATE).catch(()=>{});
   }else{
     STATE = defaultState();
   }
@@ -563,7 +563,7 @@ function renderDay(app, dayId){
   const qtoMode = isQtoViatura(day.viatura || "");
   const right = btn(qtoMode ? "+ QTO" : "+ Avaliação","primary",`type="button" id="newRecordBtn"`);
   const left = btn("←","ghost",`type="button" id="backBtn"`);
-  TEMP_NOT_FOUND
+  const countIntegrantes = (day.integrantesText||"").split("\n").map(x=>x.trim()).filter(Boolean).length;
   app.innerHTML = topbar({title:`${formatDateBR(day.dateISO)} — ${day.viatura||"Sem viatura"}`, left, right}) + `
     <main class="content">
       <div class="muted">${countIntegrantes} integrante(s)</div>
