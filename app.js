@@ -1,9 +1,7 @@
 import { loadState, saveState } from "./db.js";
-
 /* ---------------- utils ---------------- */
 const $ = (sel, el=document) => el.querySelector(sel);
 const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
-
 function uid(prefix="id"){ return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`; }
 function pad(n){ return String(n).padStart(2,"0"); }
 function formatDateISO(d=new Date()){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
@@ -89,7 +87,6 @@ function debounce(fn, ms=450){
 function safeClone(obj){
   try{ return structuredClone(obj); }catch{ return JSON.parse(JSON.stringify(obj)); }
 }
-
 // CPF validation + mask
 function isValidCPF(input){
   const cpf = onlyDigits(input);
@@ -113,7 +110,6 @@ function maskCPF(input){
   if(cpf.length<=9) return `${cpf.slice(0,3)}.${cpf.slice(3,6)}.${cpf.slice(6)}`;
   return `${cpf.slice(0,3)}.${cpf.slice(3,6)}.${cpf.slice(6,9)}-${cpf.slice(9,11)}`;
 }
-
 /* ---------------- state ---------------- */
 const defaultState = () => ({
   version: 12,
@@ -121,7 +117,6 @@ const defaultState = () => ({
   days: [],
   favorites: { reguladores: [], unidades: [] }
 });
-
 const PROCEDIMENTO_LABELS = {
   abordagem: "Abordagem",
   avaliacao: "Avaliação",
@@ -133,16 +128,13 @@ const PROCEDIMENTO_LABELS = {
   transporte: "Transporte",
   rcp: "RCP"
 };
-
 const PUPILA_LABELS = {
   isocorica: "Isocórica",
   miotica: "Miotica",
   midriatica: "Midriatica",
   anisocorica: "Anisocórica"
 };
-
 const QTO_VIATURA_PREFIXES = ["ABR", "ABS", "ABT"];
-
 function isQtoViatura(viatura=""){
   const v = String(viatura || "").trim().toUpperCase();
   return QTO_VIATURA_PREFIXES.some(prefix => (
@@ -153,7 +145,6 @@ function isQtoViatura(viatura=""){
     new RegExp(`^${prefix}\d`).test(v)
   ));
 }
-
 function ensureQtoShape(qto={}){
   return {
     ...qto,
@@ -162,28 +153,23 @@ function ensureQtoShape(qto={}){
     observacoes: qto.observacoes || ""
   };
 }
-
 function getProcedimentosSelecionados(procedimentos={}){
   return Object.entries(PROCEDIMENTO_LABELS)
     .filter(([key]) => !!procedimentos?.[key])
     .map(([,label]) => label);
 }
-
 function formatPupilaResumo(pupila={}){
   const tipo = PUPILA_LABELS[pupila?.tipo] || "";
   const lados = [];
   if(pupila?.esquerda) lados.push("esquerda");
   if(pupila?.direita) lados.push("direita");
-
   if(!tipo && !pupila?.reagente) return "";
-
   let resumo = tipo || "Sem tipo informado";
   if(pupila?.reagente){
     resumo += lados.length ? ` • reagente (${lados.join(" e ")})` : " • reagente";
   }
   return resumo;
 }
-
 function ensureEvaluationShape(ev={}){
   const vitais = ev.vitais || {};
   return {
@@ -239,7 +225,6 @@ function ensureEvaluationShape(ev={}){
     }
   };
 }
-
 function normalizeState(state){
   const base = defaultState();
   const next = {
@@ -258,15 +243,12 @@ function normalizeState(state){
   }));
   return next;
 }
-
 let STATE = defaultState();
 let HYDRATED = false;
-
 const persist = debounce(async ()=>{
   STATE.lastSavedAt = Date.now();
   await saveState(STATE);
 }, 450);
-
 async function init(){
   const loaded = await loadState();
   if(loaded){
@@ -276,34 +258,27 @@ async function init(){
     STATE = defaultState();
   }
   HYDRATED = true;
-
   if("serviceWorker" in navigator){
     navigator.serviceWorker.register("./sw.js").catch(()=>{});
   }
-
   window.addEventListener("hashchange", ()=>{ saveState(STATE).catch(()=>{}); render(); });
   document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="hidden") saveState(STATE).catch(()=>{}); });
   window.addEventListener("pagehide", ()=>{ saveState(STATE).catch(()=>{}); });
-
   if(!location.hash) location.hash = "#/";
   render();
 }
-
 function setState(mutator, opts={ render:true }){
   mutator(STATE);
   persist();
   if(opts.render) render();
 }
-
 function getDay(dayId){ return (STATE.days||[]).find(d=>d.id===dayId); }
 function getEval(day, evId){ return (day?.evaluations||[]).find(e=>e.id===evId); }
 function getQto(day, qtoId){ return (day?.qtos||[]).find(q=>q.id===qtoId); }
-
 function displayName(ev){
   const nome = (ev?.pessoa?.nome||"").trim();
   return nome ? nome : "Não identificado";
 }
-
 /* ---------------- actions ---------------- */
 function createDay({viatura, integrantesText, dateISO}){
   const day = {
@@ -322,7 +297,6 @@ function createDay({viatura, integrantesText, dateISO}){
 function deleteDay(dayId){
   setState(s => { s.days = (s.days||[]).filter(d=>d.id!==dayId); });
 }
-
 function createEvaluation(dayId){
   const ev = ensureEvaluationShape({
     id: uid("ev"),
@@ -330,13 +304,11 @@ function createEvaluation(dayId){
     createdAt: Date.now(),
     updatedAt: Date.now(),
     startedAt: nowLocalISODateTime(),
-
     protocolo: "",
     pessoa: { nome:"", documento:"", nascimento:"", idade:"" },
     docTipo: "documento",
     endereco: "",
     gps: "",
-
     vitais: {
       pa: { prejudicada:false, pas:"", pad:"" },
       fc: { prejudicada:false, valor:"" },
@@ -346,7 +318,6 @@ function createEvaluation(dayId){
       glasgow: "",
       pupila: { tipo:"", reagente:false, esquerda:false, direita:false }
     },
-
     procedimentos: {
       abordagem:false,
       avaliacao:false,
@@ -358,7 +329,6 @@ function createEvaluation(dayId){
       transporte:false,
       rcp:false
     },
-
     casoClinico: "",
     regulacao: { regulador:"", senha:"", unidade:"" },
     admissao: {
@@ -369,7 +339,6 @@ function createEvaluation(dayId){
       dataHora:""
     }
   });
-
   setState(s=>{
     const d = (s.days||[]).find(x=>x.id===dayId);
     if(!d) return;
@@ -378,7 +347,6 @@ function createEvaluation(dayId){
   });
   return ev.id;
 }
-
 function createQto(dayId){
   const qto = ensureQtoShape({
     id: uid("qto"),
@@ -388,7 +356,6 @@ function createQto(dayId){
     startedAt: nowLocalISODateTime(),
     observacoes: ""
   });
-
   setState(s=>{
     const d = (s.days||[]).find(x=>x.id===dayId);
     if(!d) return;
@@ -397,7 +364,6 @@ function createQto(dayId){
   });
   return qto.id;
 }
-
 function updateEvaluation(dayId, evId, nextEv, opts={ render:true }){
   setState(s=>{
     const d = (s.days||[]).find(x=>x.id===dayId);
@@ -415,7 +381,6 @@ function deleteEvaluation(dayId, evId){
     d.updatedAt = Date.now();
   });
 }
-
 function updateQto(dayId, qtoId, nextQto, opts={ render:true }){
   setState(s=>{
     const d = (s.days||[]).find(x=>x.id===dayId);
@@ -433,7 +398,6 @@ function deleteQto(dayId, qtoId){
     d.updatedAt = Date.now();
   });
 }
-
 function toggleFavorite(kind, value){
   const v = String(value||"").trim();
   if(!v) return;
@@ -446,7 +410,6 @@ function toggleFavorite(kind, value){
     s.favorites[key] = s.favorites[key].slice(0, 30);
   });
 }
-
 /* ---------------- UI helpers ---------------- */
 function topbar({left="", title="", right=""}){
   return `
@@ -480,14 +443,12 @@ function toast(text){
 function escapeHTML(s=""){
   return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
-
 let TOAST = "";
 function setToast(msg){
   TOAST = msg;
   render();
   setTimeout(()=>{ TOAST=""; render(); }, 1800);
 }
-
 function openModal(html){
   const el = document.createElement("div");
   el.className = "modal-backdrop";
@@ -499,7 +460,6 @@ function openModal(html){
   return el;
 }
 function closeModal(el){ if(el && el.parentNode) el.parentNode.removeChild(el); }
-
 /* ---------------- routing/render ---------------- */
 function parseRoute(){
   const h = location.hash.replace(/^#/, "");
@@ -510,7 +470,6 @@ function parseRoute(){
   if(parts[0]==="day" && parts[1] && parts[2]==="qto" && parts[3]) return { name:"qto", dayId:parts[1], qtoId:parts[3] };
   return { name:"days" };
 }
-
 function render(){
   const app = $("#app");
   if(!HYDRATED){
@@ -523,7 +482,6 @@ function render(){
   else if(route.name==="eval") renderEval(app, route.dayId, route.evId);
   else if(route.name==="qto") renderQto(app, route.dayId, route.qtoId);
 }
-
 function renderDays(app){
   const right = btn("+ Novo dia","primary",`id="newDayBtn" type="button"`);
   app.innerHTML = topbar({title:"Triagem GU", right}) + `
@@ -561,7 +519,6 @@ function renderDays(app){
     };
   });
 }
-
 function showNewDayModal(){
   const today = formatDateISO(new Date());
   const modal = openModal(`
@@ -595,7 +552,6 @@ function showNewDayModal(){
     location.hash = `#/day/${id}`;
   };
 }
-
 function renderDay(app, dayId){
   const day = getDay(dayId);
   if(!day){
@@ -604,25 +560,19 @@ function renderDay(app, dayId){
     $("#backBtn").onclick = ()=>location.hash="#/";
     return;
   }
-
   const qtoMode = isQtoViatura(day.viatura || "");
   const right = btn(qtoMode ? "+ QTO" : "+ Avaliação","primary",`type="button" id="newRecordBtn"`);
   const left = btn("←","ghost",`type="button" id="backBtn"`);
-  const countIntegrantes = (day.integrantesText||"").split("
-").map(x=>x.trim()).filter(Boolean).length;
-
+  TEMP_NOT_FOUND
   app.innerHTML = topbar({title:`${formatDateBR(day.dateISO)} — ${day.viatura||"Sem viatura"}`, left, right}) + `
     <main class="content">
       <div class="muted">${countIntegrantes} integrante(s)</div>
       ${qtoMode ? `<div class="hint" style="margin-top:8px">Viatura identificada como ${escapeHTML(day.viatura||"")}. Neste dia, o fluxo seguirá por <b>QTO</b>.</div>` : ``}
-
       <div class="searchbar">
         <input class="input" id="q" placeholder="${qtoMode ? 'Buscar QTO…' : 'Buscar por protocolo, nome ou documento…'}" />
         ${btn("Limpar","ghost",`type="button" id="clearQBtn"`)}
       </div>
-
       <div class="list" id="evalList"></div>
-
       ${qtoMode ? `` : `
         <div style="margin-top:12px">
           ${btn("Copiar todos protocolos","ghost",`type="button" id="copyProtocolsBtn"`)}
@@ -641,11 +591,9 @@ function renderDay(app, dayId){
     const evId = createEvaluation(day.id);
     location.hash = `#/day/${day.id}/ev/${evId}`;
   };
-
   const listEl = $("#evalList");
   const renderList = ()=>{
     const q = normalizeForSearch($("#q").value);
-
     if(qtoMode){
       const list = (day.qtos||[]).filter((qto, index)=>{
         if(!q) return true;
@@ -675,7 +623,6 @@ function renderDay(app, dayId){
       });
       return;
     }
-
     const list = (day.evaluations||[]).filter(ev=>{
       if(!q) return true;
       const protocolo = normalizeForSearch(ev.protocolo||"");
@@ -703,13 +650,11 @@ function renderDay(app, dayId){
       el.onclick = ()=> location.hash = `#/day/${day.id}/ev/${el.getAttribute("data-open-ev")}`;
     });
   };
-
   $("#q").addEventListener("input", renderList);
   $("#clearQBtn").onclick = ()=>{ $("#q").value=""; renderList(); };
   if(!qtoMode && $("#copyProtocolsBtn")) $("#copyProtocolsBtn").onclick = ()=>showCopyProtocolsModal(day);
   renderList();
 }
-
 function generateResumo(day, ev){
   const linhas=[];
   const inicioAvaliacao = ev.startedAt || toLocalISODateTimeFromTimestamp(ev.createdAt);
@@ -717,7 +662,6 @@ function generateResumo(day, ev){
   if(ev.endereco) linhas.push(`Endereço: ${ev.endereco}`);
   linhas.push(`Data: ${day?.dateISO ? formatDateBR(day.dateISO) : "-"}`);
   linhas.push(`Hora de início: ${inicioAvaliacao ? formatTimeBR(inicioAvaliacao) : "-"}`);
-
   linhas.push("");
   linhas.push(`Vítima: ${displayName(ev)}`);
   linhas.push(`Documento: ${ev.pessoa?.documento||"-"}`);
@@ -725,29 +669,23 @@ function generateResumo(day, ev){
   const idadeTxt = (ev.pessoa?.idade||"").trim();
   if(idadeTxt) linhas.push(`Idade: ${idadeTxt} ano(s)`);
   if(ev.gps) linhas.push(`GPS: ${ev.gps}`);
-
   const v=ev.vitais||{};
   const pa=v.pa||{};
   const paFilled = !!(String(pa.pas||"").trim() && String(pa.pad||"").trim());
   const paTxt = (pa.prejudicada || !paFilled) ? "Prejudicada" : `${pa.pas}x${pa.pad} mmHg`;
-
   const fcObj = v.fc||{};
   const fcFilled = !!String(fcObj.valor||"").trim();
   const fcTxt = (fcObj.prejudicada || !fcFilled) ? "Prejudicada" : (fcObj.valor||"-");
-
   const spo2Obj = v.spo2||{};
   const spo2Filled = !!String(spo2Obj.valor||"").trim();
   const spo2Txt = (spo2Obj.prejudicada || !spo2Filled) ? "Prejudicada" : `${spo2Obj.valor}%`;
-
   const mrObj = v.mr||{};
   const mrFilled = !!String(mrObj.valor||"").trim();
   const mrTxt = (mrObj.prejudicada || !mrFilled) ? "Prejudicada" : (mrObj.valor||"-");
-
   const tempTxt = String(v.temperatura||"").trim() ? `${v.temperatura} °C` : "-";
   const gcsFilled = !!String(v.glasgow||"").trim();
   const gcsTxt = gcsFilled ? v.glasgow : "Prejudicada";
   const pupilaTxt = formatPupilaResumo(v.pupila) || "-";
-
   linhas.push("");
   linhas.push("Sinais vitais:");
   linhas.push(`- PA: ${paTxt}`);
@@ -757,7 +695,6 @@ function generateResumo(day, ev){
   linhas.push(`- Temperatura: ${tempTxt}`);
   linhas.push(`- Glasgow: ${gcsTxt}`);
   linhas.push(`- Pupilas: ${pupilaTxt}`);
-
   const procedimentos = getProcedimentosSelecionados(ev.procedimentos || {});
   if(procedimentos.length || ev.casoClinico){
     linhas.push("");
@@ -765,7 +702,6 @@ function generateResumo(day, ev){
     if(procedimentos.length) linhas.push(`Procedimentos realizados: ${procedimentos.join(", ")}.`);
     if(ev.casoClinico) linhas.push(ev.casoClinico);
   }
-
   const reg=ev.regulacao||{};
   if(reg.regulador || reg.senha || reg.unidade){
     linhas.push("");
@@ -774,30 +710,24 @@ function generateResumo(day, ev){
     if(reg.senha) linhas.push(`- Senha: ${reg.senha}`);
     if(reg.unidade) linhas.push(`- Unidade: ${reg.unidade}`);
   }
-
   const adm=ev.admissao||{};
   if(adm.macaRetida===undefined && adm.marcaRetida!==undefined) adm.macaRetida = adm.marcaRetida;
-
   const nomeTxt = (adm.nome||"").trim();
   const genero = adm.genero || "";
   const cargo = adm.tipo==="medico" ? (genero==="f" ? "Médica" : "Médico")
               : adm.tipo==="enfermeiro" ? (genero==="f" ? "Enfermeira" : "Enfermeiro")
               : "Profissional";
   const prep = genero==="f" ? "pela" : "pelo";
-
   if(adm.tipo || nomeTxt){
     linhas.push("");
     linhas.push(`Admissão profissional: ${cargo}${nomeTxt ? " — " + nomeTxt : ""}`);
   }
-
   if(adm.macaRetida){
     const dt = adm.dataHora ? formatDateTimeBR(adm.dataHora) : "-";
     linhas.push(`MACA RETIDA ${prep} ${cargo}${nomeTxt ? " " + nomeTxt : ""} em ${dt}`);
   }
-
   return linhas.join("\n");
 }
-
 function renderEval(app, dayId, evId){
   const day = getDay(dayId);
   const ev = getEval(day, evId);
@@ -807,9 +737,7 @@ function renderEval(app, dayId, evId){
     $("#backBtn").onclick = ()=>location.hash = `#/day/${dayId}`;
     return;
   }
-
   let draft = safeClone(ensureEvaluationShape(ev));
-
   const left = btn("←","ghost",`type="button" id="backBtn"`);
   const right = btn("🧾 Resumo","ghost",`type="button" id="resumoBtn"`);
   app.innerHTML = topbar({title:`${ev.protocolo||"Sem protocolo"} — ${displayName(ev)}`, left, right}) + `
@@ -818,7 +746,6 @@ function renderEval(app, dayId, evId){
         <div class="row"><span class="dot"></span><span class="muted">Salvamento automático (offline)</span></div>
         ${ev.status==="saved"?pill("FINAL","ok"):pill("DRAFT","draft")}
       </div>
-
       ${section("1) Informações gerais", `
         ${field("Protocolo", `<input class="input" id="protocolo" inputmode="numeric" pattern="[0-9]*" placeholder="Ex.: 2026000123" />`)}
         ${field("Endereço", `<textarea class="textarea" id="endereco" rows="3" placeholder="Rua, número, bairro, referência..."></textarea>`)}
@@ -827,7 +754,6 @@ function renderEval(app, dayId, evId){
           ${btn("📍 Usar GPS","",`type="button" id="gpsBtn"`)}
         </div>
       `)}
-
       ${section("2) Dados pessoais", `
         ${field("Nome da vítima", `<input class="input" id="nome" placeholder="Nome completo (se houver)" />`,
           `Se vazio, aparecerá como "Não identificado".`
@@ -848,7 +774,6 @@ function renderEval(app, dayId, evId){
           </div>
         </div>
       `)}
-
       ${section("3) Sinais vitais", `
         <div class="grid2">
           <div class="card">
@@ -860,38 +785,32 @@ function renderEval(app, dayId, evId){
             </div>
             <label class="check"><input type="checkbox" id="paPrej" /> <span>Prejudicada</span></label>
           </div>
-
           <div class="card">
             <div class="title">FC</div>
             <input class="input" id="fc" inputmode="numeric" placeholder="bpm" />
             <label class="check"><input type="checkbox" id="fcPrej" /> <span>Prejudicada</span></label>
           </div>
-
           <div class="card">
             <div class="title">SpO₂</div>
             <input class="input" id="spo2" inputmode="numeric" placeholder="%" />
             <label class="check"><input type="checkbox" id="spo2Prej" /> <span>Prejudicada</span></label>
           </div>
-
           <div class="card">
             <div class="title">MR</div>
             <input class="input" id="mr" inputmode="numeric" placeholder="irpm" />
             <label class="check"><input type="checkbox" id="mrPrej" /> <span>Prejudicada</span></label>
           </div>
-
           <div class="card">
             <div class="title">Temperatura</div>
             <input class="input" id="temperatura" inputmode="decimal" placeholder="°C" />
           </div>
         </div>
-
         ${field("Glasgow", `
           <select class="input" id="glasgow">
             <option value="">Selecione…</option>
             ${Array.from({length:15},(_,i)=>15-i).map(n=>`<option value="${n}">${n}</option>`).join("")}
           </select>
         `)}
-
         <div class="card">
           <div class="title">Pupilas</div>
           ${field("Tipo de pupila", `
@@ -911,7 +830,6 @@ function renderEval(app, dayId, evId){
           </div>
         </div>
       `)}
-
       ${section("4) Evolução", `
         <div class="grid2">
           ${Object.entries(PROCEDIMENTO_LABELS).map(([key,label]) => `
@@ -922,13 +840,11 @@ function renderEval(app, dayId, evId){
         </div>
         ${field("Evolução", `<textarea class="textarea" id="casoClinico" rows="6" placeholder="Descreva a evolução (o campo cresce conforme você digita)…"></textarea>`)}
       `)}
-
       ${section("5) Regulação", `
         ${favoriteField("Médico regulador","regulador","reguladores","regulador")}
         ${field("Senha", `<input class="input" id="senha" placeholder="Senha/regulação" />`)}
         ${favoriteField("Unidade de saúde","unidade","unidades","unidade")}
       `)}
-
       ${section("6) Admissão", `
         ${field("Quem admitiu?", `
           <div class="seg">
@@ -948,7 +864,6 @@ function renderEval(app, dayId, evId){
           ${field("Data/hora da maca retida", `<input class="input" type="datetime-local" id="macaDT" />`)}
         </div>
       `)}
-
       <div class="footerbar">
         ${btn("Salvar avaliação","primary",`type="button" id="saveBtn"`)}
         <button class="btn danger" type="button" id="holdDelBtn">
@@ -956,15 +871,12 @@ function renderEval(app, dayId, evId){
           <span class="holdbar" id="holdBar" style="transform:scaleX(0)"></span>
         </button>
       </div>
-
       <div style="height:40px"></div>
     </main>
     ${toast(TOAST)}
   `;
-
   $("#backBtn").onclick = ()=>location.hash = `#/day/${day.id}`;
   $("#resumoBtn").onclick = ()=>showResumoModal(day, getEval(getDay(dayId), evId) || draft);
-
   $("#protocolo").value = onlyDigits(ev.protocolo||"");
   $("#nome").value = ev.pessoa?.nome||"";
   $("#doc").value = ev.pessoa?.documento||"";
@@ -972,7 +884,6 @@ function renderEval(app, dayId, evId){
   $("#idade").value = ev.pessoa?.idade||"";
   $("#endereco").value = ev.endereco||"";
   $("#casoClinico").value = ev.casoClinico||"";
-
   $("#pas").value = ev.vitais?.pa?.pas||"";
   $("#pad").value = ev.vitais?.pa?.pad||"";
   $("#paPrej").checked = !!ev.vitais?.pa?.prejudicada;
@@ -991,12 +902,10 @@ function renderEval(app, dayId, evId){
   $("#senha").value = ev.regulacao?.senha||"";
   $("#fav_regulador_input").value = ev.regulacao?.regulador||"";
   $("#fav_unidade_input").value = ev.regulacao?.unidade||"";
-
   Object.keys(PROCEDIMENTO_LABELS).forEach(key=>{
     const el = document.getElementById(`proc_${key}`);
     if(el) el.checked = !!ev.procedimentos?.[key];
   });
-
   const adm = ev.admissao || {};
   const macaFlag = (adm.macaRetida!==undefined) ? adm.macaRetida : !!adm.marcaRetida;
   $("#macaRetida").checked = !!macaFlag;
@@ -1005,7 +914,6 @@ function renderEval(app, dayId, evId){
   $("#admNome").value = adm.nome || "";
   setAdmButtons(adm.tipo || "");
   setGeneroButtons(adm.genero || "");
-
   const syncPupilaUI = ()=>{
     const show = $("#pupilaReagente").checked;
     $("#pupilaLadosWrap").style.display = show ? "block" : "none";
@@ -1013,14 +921,11 @@ function renderEval(app, dayId, evId){
     $("#pupilaDireita").disabled = !show;
   };
   syncPupilaUI();
-
   draft = safeClone(ensureEvaluationShape(getEval(getDay(dayId), evId) || ev));
-
   const apply = (mutate)=>{
     mutate(draft);
     updateEvaluation(day.id, ev.id, draft, { render:false });
   };
-
   $("#doc").addEventListener("input", e=>{
     const raw = e.target.value;
     const digits = onlyDigits(raw);
@@ -1034,7 +939,6 @@ function renderEval(app, dayId, evId){
       apply(n=>{ n.pessoa.documento=raw; n.docTipo="documento"; });
     }
   });
-
   $("#protocolo").addEventListener("input", e=>{
     const valor = sanitizeInteger(e.target.value, 30);
     e.target.value = valor;
@@ -1049,7 +953,6 @@ function renderEval(app, dayId, evId){
     const est = Math.min(18, Math.max(6, lines + Math.floor(el.value.length/90)));
     el.rows = est;
   });
-
   function calcIdade(iso){
     if(!iso) return "";
     const [y,m,d] = iso.split("-").map(Number);
@@ -1094,7 +997,6 @@ function renderEval(app, dayId, evId){
     syncDobAgeUI();
   });
   syncDobAgeUI();
-
   const syncPrej = ()=>{
     $("#pas").disabled = $("#paPrej").checked;
     $("#pad").disabled = $("#paPrej").checked;
@@ -1103,7 +1005,6 @@ function renderEval(app, dayId, evId){
     $("#mr").disabled = $("#mrPrej").checked;
   };
   syncPrej();
-
   $("#pas").addEventListener("input", e=>{ const v=sanitizeInteger(e.target.value,4); e.target.value=v; apply(n=>{ n.vitais.pa.pas=v; }); });
   $("#pad").addEventListener("input", e=>{ const v=sanitizeInteger(e.target.value,4); e.target.value=v; apply(n=>{ n.vitais.pa.pad=v; }); });
   $("#paPrej").addEventListener("change", e=>{ apply(n=>{ n.vitais.pa.prejudicada=e.target.checked; }); syncPrej(); });
@@ -1137,14 +1038,12 @@ function renderEval(app, dayId, evId){
   });
   $("#pupilaEsquerda").addEventListener("change", e=>apply(n=>{ n.vitais.pupila.esquerda=e.target.checked; }));
   $("#pupilaDireita").addEventListener("change", e=>apply(n=>{ n.vitais.pupila.direita=e.target.checked; }));
-
   Object.keys(PROCEDIMENTO_LABELS).forEach(key=>{
     const el = document.getElementById(`proc_${key}`);
     if(el){
       el.addEventListener("change", e=>apply(n=>{ n.procedimentos[key]=e.target.checked; }));
     }
   });
-
   wireFavoriteField("regulador", "reguladores",
     ()=> (getEval(getDay(dayId), evId)?.regulacao?.regulador||""),
     (val)=>apply(n=>{ n.regulacao.regulador=val; })
@@ -1154,7 +1053,6 @@ function renderEval(app, dayId, evId){
     ()=> (getEval(getDay(dayId), evId)?.regulacao?.unidade||""),
     (val)=>apply(n=>{ n.regulacao.unidade=val; })
   );
-
   $("#admNome").addEventListener("input", e=>apply(n=>{ n.admissao.nome=e.target.value; }));
   $("#admMed").onclick = ()=>{ apply(n=>{ n.admissao.tipo="medico"; }); setAdmButtons("medico"); };
   $("#admEnf").onclick = ()=>{ apply(n=>{ n.admissao.tipo="enfermeiro"; }); setAdmButtons("enfermeiro"); };
@@ -1170,7 +1068,6 @@ function renderEval(app, dayId, evId){
     if(checked) $("#macaDT").value = (getEval(getDay(dayId), evId)?.admissao?.dataHora || nowLocalISODateTime());
   });
   $("#macaDT").addEventListener("input", e=>apply(n=>{ n.admissao.dataHora=e.target.value; }));
-
   $("#gpsBtn").onclick = ()=>{
     if(!navigator.geolocation){ setToast("GPS não disponível."); return; }
     navigator.geolocation.getCurrentPosition(
@@ -1185,15 +1082,12 @@ function renderEval(app, dayId, evId){
       { enableHighAccuracy:true, timeout:8000, maximumAge:60000 }
     );
   };
-
   $("#saveBtn").onclick = ()=>{
     draft.status = "saved";
     updateEvaluation(day.id, ev.id, draft, { render:true });
     setToast("Avaliação salva.");
   };
-
   wireHoldToDelete(()=>{ deleteEvaluation(day.id, ev.id); location.hash = `#/day/${day.id}`; });
-
   function isVisible(el){
     return !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
   }
@@ -1217,7 +1111,6 @@ function renderEval(app, dayId, evId){
       }
     });
   });
-
   function markFilled(el){
     if(!el) return;
     const filled = !!String(el.value||"").trim();
@@ -1239,7 +1132,6 @@ function renderEval(app, dayId, evId){
       chk.addEventListener("change", ()=>markCardFilledFromCheckbox(chk));
     }
   });
-
   function setAdmButtons(tipo){
     $("#admMed").classList.toggle("on", tipo==="medico");
     $("#admEnf").classList.toggle("on", tipo==="enfermeiro");
@@ -1249,7 +1141,6 @@ function renderEval(app, dayId, evId){
     $("#genF").classList.toggle("on", gen==="f");
   }
 }
-
 function renderQto(app, dayId, qtoId){
   const day = getDay(dayId);
   const qto = getQto(day, qtoId);
@@ -1259,7 +1150,6 @@ function renderQto(app, dayId, qtoId){
     $("#backBtn").onclick = ()=>location.hash = `#/day/${dayId}`;
     return;
   }
-
   let draft = safeClone(ensureQtoShape(qto));
   const left = btn("←","ghost",`type="button" id="backBtn"`);
   app.innerHTML = topbar({title:`QTO — ${day.viatura||"Sem viatura"}`, left}) + `
@@ -1268,7 +1158,6 @@ function renderQto(app, dayId, qtoId){
         <div class="row"><span class="dot"></span><span class="muted">Salvamento automático (offline)</span></div>
         ${qto.status==="saved"?pill("FINAL","ok"):pill("DRAFT","draft")}
       </div>
-
       ${section("QTO", `
         <div class="card">
           <div class="title">Fluxo QTO criado com sucesso</div>
@@ -1276,7 +1165,6 @@ function renderQto(app, dayId, qtoId){
           <div class="muted" style="margin-top:8px">Por enquanto o formulário QTO está em branco, apenas para validar o funcionamento do novo caminho.</div>
         </div>
       `)}
-
       <div class="footerbar">
         ${btn("Salvar QTO","primary",`type="button" id="saveQtoBtn"`)}
         <button class="btn danger" type="button" id="holdDelBtn">
@@ -1284,12 +1172,10 @@ function renderQto(app, dayId, qtoId){
           <span class="holdbar" id="holdBar" style="transform:scaleX(0)"></span>
         </button>
       </div>
-
       <div style="height:40px"></div>
     </main>
     ${toast(TOAST)}
   `;
-
   $("#backBtn").onclick = ()=>location.hash = `#/day/${day.id}`;
   $("#saveQtoBtn").onclick = ()=>{
     draft.status = "saved";
@@ -1298,7 +1184,6 @@ function renderQto(app, dayId, qtoId){
   };
   wireHoldToDelete(()=>{ deleteQto(day.id, qto.id); location.hash = `#/day/${day.id}`; });
 }
-
 function favoriteField(label, kind, favKey, idBase){
   const inputId = `fav_${idBase}_input`;
   const listId = `fav_${idBase}_list`;
@@ -1321,7 +1206,6 @@ function favoriteField(label, kind, favKey, idBase){
     </div>
   `;
 }
-
 function wireFavoriteField(idBase, favKey, getValue, setValue){
   const input = document.querySelector(`#fav_${idBase}_input`);
   const star = document.querySelector(`#fav_${idBase}_star`);
@@ -1342,7 +1226,6 @@ function wireFavoriteField(idBase, favKey, getValue, setValue){
   });
   refreshStar();
 }
-
 function wireHoldToDelete(onConfirm){
   const btn = document.querySelector("#holdDelBtn");
   const bar = document.querySelector("#holdBar");
@@ -1369,7 +1252,6 @@ function wireHoldToDelete(onConfirm){
   });
   ["pointerup","pointerleave","pointercancel"].forEach(evt=>btn.addEventListener(evt, stop));
 }
-
 function showResumoModal(day, ev){
   const text = generateResumo(day, ev);
   const modal = openModal(`
@@ -1402,17 +1284,14 @@ function showResumoModal(day, ev){
     }
   };
 }
-
 function showCopyProtocolsModal(day){
   const protocolos = (day?.evaluations || [])
     .map(ev => String(ev.protocolo || "").trim())
     .filter(Boolean);
-
   if(!protocolos.length){
     setToast("Nenhum protocolo preenchido.");
     return;
   }
-
   const text = protocolos.join("\n");
   const modal = openModal(`
     <div class="modal" role="dialog" aria-modal="true">
@@ -1444,5 +1323,4 @@ function showCopyProtocolsModal(day){
     }
   };
 }
-
 init();
