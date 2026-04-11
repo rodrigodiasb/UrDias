@@ -116,7 +116,7 @@ function maskCPF(input){
 
 /* ---------------- state ---------------- */
 const defaultState = () => ({
-  version: 9,
+  version: 12,
   lastSavedAt: null,
   days: [],
   favorites: { reguladores: [], unidades: [] }
@@ -140,6 +140,28 @@ const PUPILA_LABELS = {
   midriatica: "Midriatica",
   anisocorica: "Anisocórica"
 };
+
+const QTO_VIATURA_PREFIXES = ["ABR", "ABS", "ABT"];
+
+function isQtoViatura(viatura=""){
+  const v = String(viatura || "").trim().toUpperCase();
+  return QTO_VIATURA_PREFIXES.some(prefix => (
+    v === prefix ||
+    v.startsWith(prefix + "-") ||
+    v.startsWith(prefix + " ") ||
+    v.startsWith(prefix + "_") ||
+    new RegExp(`^${prefix}\d`).test(v)
+  ));
+}
+
+function ensureQtoShape(qto={}){
+  return {
+    ...qto,
+    startedAt: qto.startedAt || toLocalISODateTimeFromTimestamp(qto.createdAt) || nowLocalISODateTime(),
+    status: qto.status || "draft",
+    observacoes: qto.observacoes || ""
+  };
+}
 
 function getProcedimentosSelecionados(procedimentos={}){
   return Object.entries(PROCEDIMENTO_LABELS)
@@ -228,10 +250,11 @@ function normalizeState(state){
       unidades: state?.favorites?.unidades || []
     }
   };
-  next.version = 10;
+  next.version = 12;
   next.days = (state?.days || []).map(day => ({
     ...day,
-    evaluations: (day.evaluations || []).map(ensureEvaluationShape)
+    evaluations: (day.evaluations || []).map(ensureEvaluationShape),
+    qtos: (day.qtos || []).map(ensureQtoShape)
   }));
   return next;
 }
@@ -248,7 +271,7 @@ async function init(){
   const loaded = await loadState();
   if(loaded){
     STATE = normalizeState(loaded);
-    if((loaded.version || 0) < 10) saveState(STATE).catch(()=>{});
+    if((loaded.version || 0) < 12) saveState(STATE).catch(()=>{});
   }else{
     STATE = defaultState();
   }
@@ -274,6 +297,7 @@ function setState(mutator, opts={ render:true }){
 
 function getDay(dayId){ return (STATE.days||[]).find(d=>d.id===dayId); }
 function getEval(day, evId){ return (day?.evaluations||[]).find(e=>e.id===evId); }
+function getQto(day, qtoId){ return (day?.qtos||[]).find(q=>q.id===qtoId); }
 
 function displayName(ev){
   const nome = (ev?.pessoa?.nome||"").trim();
@@ -289,7 +313,8 @@ function createDay({viatura, integrantesText, dateISO}){
     integrantesText: integrantesText || "",
     createdAt: Date.now(),
     updatedAt: Date.now(),
-    evaluations: []
+    evaluations: [],
+    qtos: []
   };
   setState(s => { s.days = [day, ...(s.days||[])]; });
   return day.id;
@@ -354,6 +379,25 @@ function createEvaluation(dayId){
   return ev.id;
 }
 
+function createQto(dayId){
+  const qto = ensureQtoShape({
+    id: uid("qto"),
+    status: "draft",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    startedAt: nowLocalISODateTime(),
+    observacoes: ""
+  });
+
+  setState(s=>{
+    const d = (s.days||[]).find(x=>x.id===dayId);
+    if(!d) return;
+    d.qtos = [qto, ...(d.qtos||[])];
+    d.updatedAt = Date.now();
+  });
+  return qto.id;
+}
+
 function updateEvaluation(dayId, evId, nextEv, opts={ render:true }){
   setState(s=>{
     const d = (s.days||[]).find(x=>x.id===dayId);
@@ -368,6 +412,24 @@ function deleteEvaluation(dayId, evId){
     const d = (s.days||[]).find(x=>x.id===dayId);
     if(!d) return;
     d.evaluations = (d.evaluations||[]).filter(e=>e.id!==evId);
+    d.updatedAt = Date.now();
+  });
+}
+
+function updateQto(dayId, qtoId, nextQto, opts={ render:true }){
+  setState(s=>{
+    const d = (s.days||[]).find(x=>x.id===dayId);
+    if(!d) return;
+    nextQto.updatedAt = Date.now();
+    d.qtos = (d.qtos||[]).map(q=> q.id===qtoId ? nextQto : q);
+    d.updatedAt = Date.now();
+  }, opts);
+}
+function deleteQto(dayId, qtoId){
+  setState(s=>{
+    const d = (s.days||[]).find(x=>x.id===dayId);
+    if(!d) return;
+    d.qtos = (d.qtos||[]).filter(q=>q.id!==qtoId);
     d.updatedAt = Date.now();
   });
 }
@@ -445,6 +507,7 @@ function parseRoute(){
   if(parts.length===0) return { name:"days" };
   if(parts[0]==="day" && parts[1] && parts.length===2) return { name:"day", dayId:parts[1] };
   if(parts[0]==="day" && parts[1] && parts[2]==="ev" && parts[3]) return { name:"eval", dayId:parts[1], evId:parts[3] };
+  if(parts[0]==="day" && parts[1] && parts[2]==="qto" && parts[3]) return { name:"qto", dayId:parts[1], qtoId:parts[3] };
   return { name:"days" };
 }
 
@@ -458,6 +521,7 @@ function render(){
   if(route.name==="days") renderDays(app);
   else if(route.name==="day") renderDay(app, route.dayId);
   else if(route.name==="eval") renderEval(app, route.dayId, route.evId);
+  else if(route.name==="qto") renderQto(app, route.dayId, route.qtoId);
 }
 
 function renderDays(app){
@@ -475,7 +539,7 @@ function renderDays(app){
               <div class="row space">
                 <div>
                   <div class="title">${escapeHTML(formatDateBR(d.dateISO))} — ${escapeHTML(d.viatura||"Sem viatura")}</div>
-                  <div class="muted">${count} integrante(s) • ${(d.evaluations||[]).length} avaliação(ões)</div>
+                  <div class="muted">${count} integrante(s) • ${isQtoViatura(d.viatura||"") ? ((d.qtos||[]).length + ' QTO(s)') : ((d.evaluations||[]).length + ' avaliação(ões)')}</div>
                 </div>
                 ${btn("🗑","ghost",`data-del-day="${d.id}" aria-label="Excluir dia" type="button"`)}
               </div>
@@ -540,27 +604,40 @@ function renderDay(app, dayId){
     $("#backBtn").onclick = ()=>location.hash="#/";
     return;
   }
-  const right = btn("+ Avaliação","primary",`type="button" id="newEvalBtn"`);
+
+  const qtoMode = isQtoViatura(day.viatura || "");
+  const right = btn(qtoMode ? "+ QTO" : "+ Avaliação","primary",`type="button" id="newRecordBtn"`);
   const left = btn("←","ghost",`type="button" id="backBtn"`);
+  const countIntegrantes = (day.integrantesText||"").split("
+").map(x=>x.trim()).filter(Boolean).length;
+
   app.innerHTML = topbar({title:`${formatDateBR(day.dateISO)} — ${day.viatura||"Sem viatura"}`, left, right}) + `
     <main class="content">
-      <div class="muted">${(day.integrantesText||"").split("\n").map(x=>x.trim()).filter(Boolean).length} integrante(s)</div>
+      <div class="muted">${countIntegrantes} integrante(s)</div>
+      ${qtoMode ? `<div class="hint" style="margin-top:8px">Viatura identificada como ${escapeHTML(day.viatura||"")}. Neste dia, o fluxo seguirá por <b>QTO</b>.</div>` : ``}
 
       <div class="searchbar">
-        <input class="input" id="q" placeholder="Buscar por protocolo, nome ou documento…" />
+        <input class="input" id="q" placeholder="${qtoMode ? 'Buscar QTO…' : 'Buscar por protocolo, nome ou documento…'}" />
         ${btn("Limpar","ghost",`type="button" id="clearQBtn"`)}
       </div>
 
       <div class="list" id="evalList"></div>
 
-      <div style="margin-top:12px">
-        ${btn("Copiar todos protocolos","ghost",`type="button" id="copyProtocolsBtn"`)}
-      </div>
+      ${qtoMode ? `` : `
+        <div style="margin-top:12px">
+          ${btn("Copiar todos protocolos","ghost",`type="button" id="copyProtocolsBtn"`)}
+        </div>
+      `}
     </main>
     ${toast(TOAST)}
   `;
   $("#backBtn").onclick = ()=>location.hash="#/";
-  $("#newEvalBtn").onclick = ()=>{
+  $("#newRecordBtn").onclick = ()=>{
+    if(qtoMode){
+      const qtoId = createQto(day.id);
+      location.hash = `#/day/${day.id}/qto/${qtoId}`;
+      return;
+    }
     const evId = createEvaluation(day.id);
     location.hash = `#/day/${day.id}/ev/${evId}`;
   };
@@ -568,6 +645,37 @@ function renderDay(app, dayId){
   const listEl = $("#evalList");
   const renderList = ()=>{
     const q = normalizeForSearch($("#q").value);
+
+    if(qtoMode){
+      const list = (day.qtos||[]).filter((qto, index)=>{
+        if(!q) return true;
+        const label = normalizeForSearch(`QTO ${index+1}`);
+        const obs = normalizeForSearch(qto.observacoes || "");
+        return label.includes(q) || obs.includes(q);
+      });
+      if(list.length===0){
+        listEl.innerHTML = card(`<div class="title">Nenhum QTO</div><div class="muted">Toque em <b>+ QTO</b> para validar o novo fluxo.</div>`);
+        return;
+      }
+      listEl.innerHTML = list.map((qto, index)=>{
+        const st = qto.status==="saved" ? pill("FINAL","ok") : pill("DRAFT","draft");
+        const created = formatTimeBR(qto.startedAt || toLocalISODateTimeFromTimestamp(qto.createdAt)) || "--:--";
+        return card(`
+          <div class="row space">
+            <div>
+              <div class="title">${escapeHTML(`QTO ${index+1}`)}</div>
+              <div class="muted">${qto.status==="saved"?"✅ Salvo":"📝 Rascunho"} • iniciado às ${escapeHTML(created)}</div>
+            </div>
+            ${st}
+          </div>
+        `, true, `data-open-qto="${qto.id}"`);
+      }).join("");
+      $$('[data-open-qto]').forEach(el=>{
+        el.onclick = ()=> location.hash = `#/day/${day.id}/qto/${el.getAttribute("data-open-qto")}`;
+      });
+      return;
+    }
+
     const list = (day.evaluations||[]).filter(ev=>{
       if(!q) return true;
       const protocolo = normalizeForSearch(ev.protocolo||"");
@@ -591,14 +699,14 @@ function renderDay(app, dayId){
         </div>
       `, true, `data-open-ev="${ev.id}"`);
     }).join("");
-    $$("[data-open-ev]").forEach(el=>{
+    $$('[data-open-ev]').forEach(el=>{
       el.onclick = ()=> location.hash = `#/day/${day.id}/ev/${el.getAttribute("data-open-ev")}`;
     });
   };
 
   $("#q").addEventListener("input", renderList);
   $("#clearQBtn").onclick = ()=>{ $("#q").value=""; renderList(); };
-  $("#copyProtocolsBtn").onclick = ()=>showCopyProtocolsModal(day);
+  if(!qtoMode && $("#copyProtocolsBtn")) $("#copyProtocolsBtn").onclick = ()=>showCopyProtocolsModal(day);
   renderList();
 }
 
@@ -1140,6 +1248,55 @@ function renderEval(app, dayId, evId){
     $("#genM").classList.toggle("on", gen==="m");
     $("#genF").classList.toggle("on", gen==="f");
   }
+}
+
+function renderQto(app, dayId, qtoId){
+  const day = getDay(dayId);
+  const qto = getQto(day, qtoId);
+  if(!day || !qto){
+    app.innerHTML = topbar({title:"QTO não encontrado", left:btn("←","ghost",`type="button" id="backBtn"`)}) +
+      `<main class="content"><div class="muted">Este QTO não existe (ou foi excluído).</div></main>`;
+    $("#backBtn").onclick = ()=>location.hash = `#/day/${dayId}`;
+    return;
+  }
+
+  let draft = safeClone(ensureQtoShape(qto));
+  const left = btn("←","ghost",`type="button" id="backBtn"`);
+  app.innerHTML = topbar({title:`QTO — ${day.viatura||"Sem viatura"}`, left}) + `
+    <main class="content">
+      <div class="autosave">
+        <div class="row"><span class="dot"></span><span class="muted">Salvamento automático (offline)</span></div>
+        ${qto.status==="saved"?pill("FINAL","ok"):pill("DRAFT","draft")}
+      </div>
+
+      ${section("QTO", `
+        <div class="card">
+          <div class="title">Fluxo QTO criado com sucesso</div>
+          <div class="muted">Esta página foi aberta a partir de uma viatura do tipo ABR, ABS ou ABT.</div>
+          <div class="muted" style="margin-top:8px">Por enquanto o formulário QTO está em branco, apenas para validar o funcionamento do novo caminho.</div>
+        </div>
+      `)}
+
+      <div class="footerbar">
+        ${btn("Salvar QTO","primary",`type="button" id="saveQtoBtn"`)}
+        <button class="btn danger" type="button" id="holdDelBtn">
+          <span>Segure para excluir</span>
+          <span class="holdbar" id="holdBar" style="transform:scaleX(0)"></span>
+        </button>
+      </div>
+
+      <div style="height:40px"></div>
+    </main>
+    ${toast(TOAST)}
+  `;
+
+  $("#backBtn").onclick = ()=>location.hash = `#/day/${day.id}`;
+  $("#saveQtoBtn").onclick = ()=>{
+    draft.status = "saved";
+    updateQto(day.id, qto.id, draft, { render:true });
+    setToast("QTO salvo.");
+  };
+  wireHoldToDelete(()=>{ deleteQto(day.id, qto.id); location.hash = `#/day/${day.id}`; });
 }
 
 function favoriteField(label, kind, favKey, idBase){
