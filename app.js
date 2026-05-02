@@ -247,6 +247,7 @@ function ensureEvaluationShape(ev={}){
       genero: "",
       nome: "",
       macaRetida: false,
+      macaNumero: "",
       dataHora: "",
       ...(ev.admissao || {})
     }
@@ -748,18 +749,15 @@ function generateResumo(day, ev){
   const adm=ev.admissao||{};
   if(adm.macaRetida===undefined && adm.marcaRetida!==undefined) adm.macaRetida = adm.marcaRetida;
   const nomeTxt = (adm.nome||"").trim();
-  const genero = adm.genero || "";
-  const cargo = adm.tipo==="medico" ? (genero==="f" ? "Médica" : "Médico")
-              : adm.tipo==="enfermeiro" ? (genero==="f" ? "Enfermeira" : "Enfermeiro")
-              : "Profissional";
-  const prep = genero==="f" ? "pela" : "pelo";
+  const profissao = formatProfissaoInclusiva(adm.tipo);
   if(adm.tipo || nomeTxt){
     linhas.push("");
-    linhas.push(`Admissão profissional: ${cargo}${nomeTxt ? " — " + nomeTxt : ""}`);
+    linhas.push(`Admissão profissional: ${profissao}${nomeTxt ? " — " + nomeTxt : ""}`);
   }
   if(adm.macaRetida){
+    const numero = sanitizeInteger(adm.macaNumero || "", 10) || "-";
     const dt = adm.dataHora ? formatDateTimeBR(adm.dataHora) : "-";
-    linhas.push(`MACA RETIDA ${prep} ${cargo}${nomeTxt ? " " + nomeTxt : ""} em ${dt}`);
+    linhas.push(`Maca ${numero} retida pelo(a) ${profissao}${nomeTxt ? " " + nomeTxt : ""} em ${dt}`);
   }
   return linhas.join("\n");
 }
@@ -909,19 +907,14 @@ function renderEval(app, dayId, evId){
       ${section("6) Admissão", `
         ${field("Quem admitiu?", `
           <div class="seg">
-            <button type="button" id="admMed">Médico</button>
-            <button type="button" id="admEnf">Enfermeiro</button>
-          </div>
-        `)}
-        ${field("Gênero do profissional", `
-          <div class="seg">
-            <button type="button" id="genM">Masculino</button>
-            <button type="button" id="genF">Feminino</button>
+            <button type="button" id="admMed">Médico(a)</button>
+            <button type="button" id="admEnf">Enfermeiro(a)</button>
           </div>
         `)}
         ${field("Nome de quem admitiu", `<input class="input" id="admNome" placeholder="Nome do profissional" />`)}
         <label class="check"><input type="checkbox" id="macaRetida" /> <span>Maca retida</span></label>
-        <div id="macaWrap" style="display:none">
+        <div id="macaWrap" style="display:none; margin-top:10px">
+          ${field("Número da maca", `<input class="input" id="macaNumero" inputmode="numeric" pattern="[0-9]*" placeholder="Ex.: 5" />`, `Preencha apenas o número da maca.`)}
           ${field("Data/hora da maca retida", `<input class="input" type="datetime-local" id="macaDT" />`)}
         </div>
       `)}
@@ -970,11 +963,11 @@ function renderEval(app, dayId, evId){
   const adm = ev.admissao || {};
   const macaFlag = (adm.macaRetida!==undefined) ? adm.macaRetida : !!adm.marcaRetida;
   $("#macaRetida").checked = !!macaFlag;
+  $("#macaNumero").value = sanitizeInteger(adm.macaNumero || "", 10);
   $("#macaDT").value = adm.dataHora || "";
-  $("#macaWrap").style.display = $("#macaRetida").checked ? "block" : "none";
   $("#admNome").value = adm.nome || "";
   setAdmButtons(adm.tipo || "");
-  setGeneroButtons(adm.genero || "");
+  syncEvalMacaFields($("#macaRetida").checked);
   const syncPupilaUI = ()=>{
     const show = $("#pupilaReagente").checked;
     $("#pupilaLadosWrap").style.display = show ? "block" : "none";
@@ -1118,16 +1111,27 @@ function renderEval(app, dayId, evId){
   $("#admNome").addEventListener("input", e=>apply(n=>{ n.admissao.nome=e.target.value; }));
   $("#admMed").onclick = ()=>{ apply(n=>{ n.admissao.tipo="medico"; }); setAdmButtons("medico"); };
   $("#admEnf").onclick = ()=>{ apply(n=>{ n.admissao.tipo="enfermeiro"; }); setAdmButtons("enfermeiro"); };
-  $("#genM").onclick = ()=>{ apply(n=>{ n.admissao.genero="m"; }); setGeneroButtons("m"); };
-  $("#genF").onclick = ()=>{ apply(n=>{ n.admissao.genero="f"; }); setGeneroButtons("f"); };
   $("#macaRetida").addEventListener("change", e=>{
     const checked = e.target.checked;
-    $("#macaWrap").style.display = checked ? "block" : "none";
+    syncEvalMacaFields(checked);
     apply(n=>{
       n.admissao.macaRetida = checked;
       if(checked && !n.admissao.dataHora) n.admissao.dataHora = nowLocalISODateTime();
+      if(!checked){
+        n.admissao.macaNumero = "";
+        n.admissao.dataHora = "";
+      }
     });
     if(checked) $("#macaDT").value = (getEval(getDay(dayId), evId)?.admissao?.dataHora || nowLocalISODateTime());
+    else {
+      $("#macaNumero").value = "";
+      $("#macaDT").value = "";
+    }
+  });
+  $("#macaNumero").addEventListener("input", e=>{
+    const valor = sanitizeInteger(e.target.value, 10);
+    e.target.value = valor;
+    apply(n=>{ n.admissao.macaNumero = valor; });
   });
   $("#macaDT").addEventListener("input", e=>apply(n=>{ n.admissao.dataHora=e.target.value; }));
   $("#gpsBtn").onclick = ()=>{
@@ -1198,9 +1202,12 @@ function renderEval(app, dayId, evId){
     $("#admMed").classList.toggle("on", tipo==="medico");
     $("#admEnf").classList.toggle("on", tipo==="enfermeiro");
   }
-  function setGeneroButtons(gen){
-    $("#genM").classList.toggle("on", gen==="m");
-    $("#genF").classList.toggle("on", gen==="f");
+  function syncEvalMacaFields(checked){
+    $("#macaWrap").style.display = checked ? "block" : "none";
+    ["#macaNumero", "#macaDT"].forEach(sel=>{
+      const el = $(sel);
+      if(el) el.disabled = !checked;
+    });
   }
 }
 function renderQto(app, dayId, qtoId){
