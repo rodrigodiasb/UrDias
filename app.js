@@ -112,7 +112,7 @@ function maskCPF(input){
 }
 /* ---------------- state ---------------- */
 const defaultState = () => ({
-  version: 15,
+  version: 14,
   lastSavedAt: null,
   days: [],
   favorites: { reguladores: [], unidades: [] }
@@ -150,16 +150,7 @@ function ensureQtoShape(qto={}){
     ...qto,
     startedAt: qto.startedAt || toLocalISODateTimeFromTimestamp(qto.createdAt) || nowLocalISODateTime(),
     status: qto.status || "draft",
-    endereco: qto.endereco || "",
-    observacoes: qto.observacoes || "",
-    admissao: {
-      tipo: "",
-      nome: "",
-      macaRetida: false,
-      macaNumero: "",
-      dataHora: "",
-      ...(qto.admissao || {})
-    }
+    observacoes: qto.observacoes || ""
   };
 }
 function getProcedimentosSelecionados(procedimentos={}){
@@ -178,24 +169,6 @@ function formatPupilaResumo(pupila={}){
     resumo += lados.length ? ` • reagente (${lados.join(" e ")})` : " • reagente";
   }
   return resumo;
-}
-function buildGoogleMapsSearchUrl(address=""){
-  const query = String(address || "").trim();
-  if(!query) return "";
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
-}
-function openAddressInMaps(address=""){
-  const url = buildGoogleMapsSearchUrl(address);
-  if(!url){
-    setToast("Informe o endereço para abrir no Google Maps.");
-    return;
-  }
-  window.open(url, "_blank", "noopener,noreferrer");
-}
-function formatProfissaoInclusiva(tipo=""){
-  if(tipo === "medico") return "médico(a)";
-  if(tipo === "enfermeiro") return "enfermeiro(a)";
-  return "profissional";
 }
 function ensureEvaluationShape(ev={}){
   const vitais = ev.vitais || {};
@@ -247,7 +220,6 @@ function ensureEvaluationShape(ev={}){
       genero: "",
       nome: "",
       macaRetida: false,
-      macaNumero: "",
       dataHora: "",
       ...(ev.admissao || {})
     }
@@ -263,7 +235,7 @@ function normalizeState(state){
       unidades: state?.favorites?.unidades || []
     }
   };
-  next.version = 15;
+  next.version = 14;
   next.days = (state?.days || []).map(day => ({
     ...day,
     evaluations: (day.evaluations || []).map(ensureEvaluationShape),
@@ -281,7 +253,7 @@ async function init(){
   const loaded = await loadState();
   if(loaded){
     STATE = normalizeState(loaded);
-    if((loaded.version || 0) < 15) saveState(STATE).catch(()=>{});
+    if((loaded.version || 0) < 14) saveState(STATE).catch(()=>{});
   }else{
     STATE = defaultState();
   }
@@ -382,15 +354,7 @@ function createQto(dayId){
     createdAt: Date.now(),
     updatedAt: Date.now(),
     startedAt: nowLocalISODateTime(),
-    endereco: "",
-    observacoes: "",
-    admissao: {
-      tipo: "",
-      nome: "",
-      macaRetida: false,
-      macaNumero: "",
-      dataHora: ""
-    }
+    observacoes: ""
   });
   setState(s=>{
     const d = (s.days||[]).find(x=>x.id===dayId);
@@ -749,38 +713,18 @@ function generateResumo(day, ev){
   const adm=ev.admissao||{};
   if(adm.macaRetida===undefined && adm.marcaRetida!==undefined) adm.macaRetida = adm.marcaRetida;
   const nomeTxt = (adm.nome||"").trim();
-  const profissao = formatProfissaoInclusiva(adm.tipo);
+  const genero = adm.genero || "";
+  const cargo = adm.tipo==="medico" ? (genero==="f" ? "Médica" : "Médico")
+              : adm.tipo==="enfermeiro" ? (genero==="f" ? "Enfermeira" : "Enfermeiro")
+              : "Profissional";
+  const prep = genero==="f" ? "pela" : "pelo";
   if(adm.tipo || nomeTxt){
     linhas.push("");
-    linhas.push(`Admissão profissional: ${profissao}${nomeTxt ? " — " + nomeTxt : ""}`);
+    linhas.push(`Admissão profissional: ${cargo}${nomeTxt ? " — " + nomeTxt : ""}`);
   }
   if(adm.macaRetida){
-    const numero = sanitizeInteger(adm.macaNumero || "", 10) || "-";
     const dt = adm.dataHora ? formatDateTimeBR(adm.dataHora) : "-";
-    linhas.push(`Maca ${numero} retida pelo(a) ${profissao}${nomeTxt ? " " + nomeTxt : ""} em ${dt}`);
-  }
-  return linhas.join("\n");
-}
-function generateQtoResumo(day, qto){
-  const linhas = [];
-  const inicio = qto.startedAt || toLocalISODateTimeFromTimestamp(qto.createdAt);
-  linhas.push(`QTO: ${day?.viatura || "-"}`);
-  if(qto.endereco) linhas.push(`Endereço: ${qto.endereco}`);
-  linhas.push(`Data: ${day?.dateISO ? formatDateBR(day.dateISO) : "-"}`);
-  linhas.push(`Hora de início: ${inicio ? formatTimeBR(inicio) : "-"}`);
-  const adm = qto.admissao || {};
-  if(adm.macaRetida){
-    const numero = sanitizeInteger(adm.macaNumero || "", 10) || "-";
-    const profissao = formatProfissaoInclusiva(adm.tipo);
-    const nome = String(adm.nome || "").trim();
-    const dt = adm.dataHora ? formatDateTimeBR(adm.dataHora) : "-";
-    linhas.push("");
-    linhas.push(`Maca ${numero} retida pelo(a) ${profissao}${nome ? " " + nome : ""} em ${dt}`);
-  }
-  if(qto.observacoes){
-    linhas.push("");
-    linhas.push("Observações:");
-    linhas.push(qto.observacoes);
+    linhas.push(`MACA RETIDA ${prep} ${cargo}${nomeTxt ? " " + nomeTxt : ""} em ${dt}`);
   }
   return linhas.join("\n");
 }
@@ -805,9 +749,6 @@ function renderEval(app, dayId, evId){
       ${section("1) Informações gerais", `
         ${field("Protocolo", `<input class="input" id="protocolo" inputmode="numeric" pattern="[0-9]*" placeholder="Ex.: 2026000123" />`)}
         ${field("Endereço", `<textarea class="textarea" id="endereco" rows="3" placeholder="Rua, número, bairro, referência..."></textarea>`)}
-        <div class="row" style="justify-content:flex-end; margin-top:8px">
-          ${btn("🗺 Abrir no Maps","",`type="button" id="mapsBtn"`)}
-        </div>
         <div class="row space">
           <div class="muted" id="gpsLabel">${ev.gps?escapeHTML("GPS: "+ev.gps):"Sem GPS registrado."}</div>
           ${btn("📍 Usar GPS","",`type="button" id="gpsBtn"`)}
@@ -817,7 +758,7 @@ function renderEval(app, dayId, evId){
         ${field("Nome da vítima", `<input class="input" id="nome" placeholder="Nome completo (se houver)" />`,
           `Se vazio, aparecerá como "Não identificado".`
         )}
-        ${field("CPF ou Documento", `<input class="input" id="doc" placeholder="CPF (11 dígitos) ou outro documento" />`,
+        ${field("CPF ou Documento", `<input class="input" id="doc" inputmode="numeric" pattern="[0-9]*" placeholder="Digite apenas números" />`,
           `<span id="docHint" class="hint">Detectado: Documento.</span>`
         )}
         <div class="grid2">
@@ -901,20 +842,25 @@ function renderEval(app, dayId, evId){
       `)}
       ${section("5) Regulação", `
         ${favoriteField("Médico regulador","regulador","reguladores","regulador")}
-        ${field("Senha", `<input class="input" id="senha" placeholder="Senha/regulação" />`)}
+        ${field("Senha", `<input class="input" id="senha" inputmode="numeric" pattern="[0-9]*" placeholder="Digite apenas números" />`)}
         ${favoriteField("Unidade de saúde","unidade","unidades","unidade")}
       `)}
       ${section("6) Admissão", `
         ${field("Quem admitiu?", `
           <div class="seg">
-            <button type="button" id="admMed">Médico(a)</button>
-            <button type="button" id="admEnf">Enfermeiro(a)</button>
+            <button type="button" id="admMed">Médico</button>
+            <button type="button" id="admEnf">Enfermeiro</button>
+          </div>
+        `)}
+        ${field("Gênero do profissional", `
+          <div class="seg">
+            <button type="button" id="genM">Masculino</button>
+            <button type="button" id="genF">Feminino</button>
           </div>
         `)}
         ${field("Nome de quem admitiu", `<input class="input" id="admNome" placeholder="Nome do profissional" />`)}
         <label class="check"><input type="checkbox" id="macaRetida" /> <span>Maca retida</span></label>
-        <div id="macaWrap" style="display:none; margin-top:10px">
-          ${field("Número da maca", `<input class="input" id="macaNumero" inputmode="numeric" pattern="[0-9]*" placeholder="Ex.: 5" />`, `Preencha apenas o número da maca.`)}
+        <div id="macaWrap" style="display:none">
           ${field("Data/hora da maca retida", `<input class="input" type="datetime-local" id="macaDT" />`)}
         </div>
       `)}
@@ -933,7 +879,7 @@ function renderEval(app, dayId, evId){
   $("#resumoBtn").onclick = ()=>showResumoModal(day, getEval(getDay(dayId), evId) || draft);
   $("#protocolo").value = onlyDigits(ev.protocolo||"");
   $("#nome").value = ev.pessoa?.nome||"";
-  $("#doc").value = ev.pessoa?.documento||"";
+  $("#doc").value = onlyDigits(ev.pessoa?.documento||"");
   $("#nasc").value = formatNascimentoInput(ev.pessoa?.nascimento||"");
   $("#idade").value = ev.pessoa?.idade||"";
   $("#endereco").value = ev.endereco||"";
@@ -953,7 +899,7 @@ function renderEval(app, dayId, evId){
   $("#pupilaReagente").checked = !!ev.vitais?.pupila?.reagente;
   $("#pupilaEsquerda").checked = !!ev.vitais?.pupila?.esquerda;
   $("#pupilaDireita").checked = !!ev.vitais?.pupila?.direita;
-  $("#senha").value = ev.regulacao?.senha||"";
+  $("#senha").value = onlyDigits(ev.regulacao?.senha||"");
   $("#fav_regulador_input").value = ev.regulacao?.regulador||"";
   $("#fav_unidade_input").value = ev.regulacao?.unidade||"";
   Object.keys(PROCEDIMENTO_LABELS).forEach(key=>{
@@ -963,11 +909,11 @@ function renderEval(app, dayId, evId){
   const adm = ev.admissao || {};
   const macaFlag = (adm.macaRetida!==undefined) ? adm.macaRetida : !!adm.marcaRetida;
   $("#macaRetida").checked = !!macaFlag;
-  $("#macaNumero").value = sanitizeInteger(adm.macaNumero || "", 10);
   $("#macaDT").value = adm.dataHora || "";
+  $("#macaWrap").style.display = $("#macaRetida").checked ? "block" : "none";
   $("#admNome").value = adm.nome || "";
   setAdmButtons(adm.tipo || "");
-  syncEvalMacaFields($("#macaRetida").checked);
+  setGeneroButtons(adm.genero || "");
   const syncPupilaUI = ()=>{
     const show = $("#pupilaReagente").checked;
     $("#pupilaLadosWrap").style.display = show ? "block" : "none";
@@ -981,16 +927,14 @@ function renderEval(app, dayId, evId){
     updateEvaluation(day.id, ev.id, draft, { render:false });
   };
   $("#doc").addEventListener("input", e=>{
-    const raw = e.target.value;
-    const digits = onlyDigits(raw);
+    const digits = sanitizeInteger(e.target.value, 30);
+    e.target.value = digits;
     if(digits.length===11 && isValidCPF(digits)){
-      const masked = maskCPF(digits);
-      e.target.value = masked;
-      $("#docHint").textContent = "Detectado: CPF válido (formatado automaticamente).";
-      apply(n=>{ n.pessoa.documento=masked; n.docTipo="cpf"; });
+      $("#docHint").textContent = "Detectado: CPF válido (somente números).";
+      apply(n=>{ n.pessoa.documento=digits; n.docTipo="cpf"; });
     }else{
-      $("#docHint").textContent = "Detectado: Documento.";
-      apply(n=>{ n.pessoa.documento=raw; n.docTipo="documento"; });
+      $("#docHint").textContent = "Detectado: Documento numérico.";
+      apply(n=>{ n.pessoa.documento=digits; n.docTipo="documento"; });
     }
   });
   $("#protocolo").addEventListener("input", e=>{
@@ -1000,7 +944,6 @@ function renderEval(app, dayId, evId){
   });
   $("#nome").addEventListener("input", e=>apply(n=>{ n.pessoa.nome=e.target.value; }));
   $("#endereco").addEventListener("input", e=>apply(n=>{ n.endereco=e.target.value; }));
-  $("#mapsBtn").onclick = ()=>openAddressInMaps($("#endereco").value);
   $("#casoClinico").addEventListener("input", e=>apply(n=>{ n.casoClinico=e.target.value; }));
   $("#casoClinico").addEventListener("input", ()=>{
     const el=$("#casoClinico");
@@ -1103,7 +1046,7 @@ function renderEval(app, dayId, evId){
     ()=> (getEval(getDay(dayId), evId)?.regulacao?.regulador||""),
     (val)=>apply(n=>{ n.regulacao.regulador=val; })
   );
-  $("#senha").addEventListener("input", e=>apply(n=>{ n.regulacao.senha=e.target.value; }));
+  $("#senha").addEventListener("input", e=>{ const v=sanitizeInteger(e.target.value,30); e.target.value=v; apply(n=>{ n.regulacao.senha=v; }); });
   wireFavoriteField("unidade", "unidades",
     ()=> (getEval(getDay(dayId), evId)?.regulacao?.unidade||""),
     (val)=>apply(n=>{ n.regulacao.unidade=val; })
@@ -1111,27 +1054,16 @@ function renderEval(app, dayId, evId){
   $("#admNome").addEventListener("input", e=>apply(n=>{ n.admissao.nome=e.target.value; }));
   $("#admMed").onclick = ()=>{ apply(n=>{ n.admissao.tipo="medico"; }); setAdmButtons("medico"); };
   $("#admEnf").onclick = ()=>{ apply(n=>{ n.admissao.tipo="enfermeiro"; }); setAdmButtons("enfermeiro"); };
+  $("#genM").onclick = ()=>{ apply(n=>{ n.admissao.genero="m"; }); setGeneroButtons("m"); };
+  $("#genF").onclick = ()=>{ apply(n=>{ n.admissao.genero="f"; }); setGeneroButtons("f"); };
   $("#macaRetida").addEventListener("change", e=>{
     const checked = e.target.checked;
-    syncEvalMacaFields(checked);
+    $("#macaWrap").style.display = checked ? "block" : "none";
     apply(n=>{
       n.admissao.macaRetida = checked;
       if(checked && !n.admissao.dataHora) n.admissao.dataHora = nowLocalISODateTime();
-      if(!checked){
-        n.admissao.macaNumero = "";
-        n.admissao.dataHora = "";
-      }
     });
     if(checked) $("#macaDT").value = (getEval(getDay(dayId), evId)?.admissao?.dataHora || nowLocalISODateTime());
-    else {
-      $("#macaNumero").value = "";
-      $("#macaDT").value = "";
-    }
-  });
-  $("#macaNumero").addEventListener("input", e=>{
-    const valor = sanitizeInteger(e.target.value, 10);
-    e.target.value = valor;
-    apply(n=>{ n.admissao.macaNumero = valor; });
   });
   $("#macaDT").addEventListener("input", e=>apply(n=>{ n.admissao.dataHora=e.target.value; }));
   $("#gpsBtn").onclick = ()=>{
@@ -1202,12 +1134,9 @@ function renderEval(app, dayId, evId){
     $("#admMed").classList.toggle("on", tipo==="medico");
     $("#admEnf").classList.toggle("on", tipo==="enfermeiro");
   }
-  function syncEvalMacaFields(checked){
-    $("#macaWrap").style.display = checked ? "block" : "none";
-    ["#macaNumero", "#macaDT"].forEach(sel=>{
-      const el = $(sel);
-      if(el) el.disabled = !checked;
-    });
+  function setGeneroButtons(gen){
+    $("#genM").classList.toggle("on", gen==="m");
+    $("#genF").classList.toggle("on", gen==="f");
   }
 }
 function renderQto(app, dayId, qtoId){
@@ -1221,35 +1150,18 @@ function renderQto(app, dayId, qtoId){
   }
   let draft = safeClone(ensureQtoShape(qto));
   const left = btn("←","ghost",`type="button" id="backBtn"`);
-  const right = btn("🧾 Resumo","ghost",`type="button" id="resumoQtoBtn"`);
-  app.innerHTML = topbar({title:`QTO — ${day.viatura||"Sem viatura"}`, left, right}) + `
+  app.innerHTML = topbar({title:`QTO — ${day.viatura||"Sem viatura"}`, left}) + `
     <main class="content">
       <div class="autosave">
         <div class="row"><span class="dot"></span><span class="muted">Salvamento automático (offline)</span></div>
         ${qto.status==="saved"?pill("FINAL","ok"):pill("DRAFT","draft")}
       </div>
-      ${section("1) Informações gerais", `
-        ${field("Endereço", `<textarea class="textarea" id="qtoEndereco" rows="3" placeholder="Rua, número, bairro, referência..."></textarea>`)}
-        <div class="row" style="justify-content:flex-end; margin-top:8px">
-          ${btn("🗺 Abrir no Maps","",`type="button" id="qtoMapsBtn"`)}
+      ${section("QTO", `
+        <div class="card">
+          <div class="title">Fluxo QTO criado com sucesso</div>
+          <div class="muted">Esta página foi aberta a partir de uma viatura do tipo ABR, ABS ou ABT.</div>
+          <div class="muted" style="margin-top:8px">Por enquanto o formulário QTO está em branco, apenas para validar o funcionamento do novo caminho.</div>
         </div>
-      `)}
-      ${section("2) Retenção de maca", `
-        <label class="check"><input type="checkbox" id="qtoMacaRetida" /> <span>Maca retida</span></label>
-        <div id="qtoMacaWrap" style="display:none; margin-top:10px">
-          ${field("Número da maca", `<input class="input" id="qtoMacaNumero" inputmode="numeric" pattern="[0-9]*" placeholder="Ex.: 5" />`, `Preencha apenas o número da maca.`)}
-          ${field("Profissão de quem reteve", `
-            <div class="seg">
-              <button type="button" id="qtoAdmMed">Médico(a)</button>
-              <button type="button" id="qtoAdmEnf">Enfermeiro(a)</button>
-            </div>
-          `)}
-          ${field("Nome do profissional", `<input class="input" id="qtoAdmNome" placeholder="Nome do profissional" />`)}
-          ${field("Data/hora da retenção", `<input class="input" type="datetime-local" id="qtoMacaDT" />`)}
-        </div>
-      `)}
-      ${section("3) Observações", `
-        ${field("Observações", `<textarea class="textarea" id="qtoObs" rows="5" placeholder="Observações adicionais do QTO..."></textarea>`)}
       `)}
       <div class="footerbar">
         ${btn("Salvar QTO","primary",`type="button" id="saveQtoBtn"`)}
@@ -1263,73 +1175,12 @@ function renderQto(app, dayId, qtoId){
     ${toast(TOAST)}
   `;
   $("#backBtn").onclick = ()=>location.hash = `#/day/${day.id}`;
-  $("#resumoQtoBtn").onclick = ()=>showQtoResumoModal(day, getQto(getDay(dayId), qtoId) || draft);
-  $("#qtoEndereco").value = qto.endereco || "";
-  $("#qtoObs").value = qto.observacoes || "";
-  const adm = qto.admissao || {};
-  const macaCheckedInitial = !!adm.macaRetida;
-  $("#qtoMacaRetida").checked = macaCheckedInitial;
-  $("#qtoMacaNumero").value = sanitizeInteger(adm.macaNumero || "", 10);
-  $("#qtoAdmNome").value = adm.nome || "";
-  $("#qtoMacaDT").value = adm.dataHora || "";
-  syncQtoMacaFields(macaCheckedInitial);
-  setQtoAdmButtons(adm.tipo || "");
-  draft = safeClone(ensureQtoShape(getQto(getDay(dayId), qtoId) || qto));
-  const apply = (mutate)=>{
-    mutate(draft);
-    updateQto(day.id, qto.id, draft, { render:false });
-  };
-  $("#qtoEndereco").addEventListener("input", e=>apply(n=>{ n.endereco = e.target.value; }));
-  $("#qtoMapsBtn").onclick = ()=>openAddressInMaps($("#qtoEndereco").value);
-  $("#qtoObs").addEventListener("input", e=>apply(n=>{ n.observacoes = e.target.value; }));
-  $("#qtoMacaRetida").addEventListener("change", e=>{
-    const checked = e.target.checked;
-    syncQtoMacaFields(checked);
-    apply(n=>{
-      n.admissao.macaRetida = checked;
-      if(checked && !n.admissao.dataHora) n.admissao.dataHora = nowLocalISODateTime();
-      if(!checked){
-        n.admissao.macaNumero = "";
-        n.admissao.tipo = "";
-        n.admissao.nome = "";
-        n.admissao.dataHora = "";
-      }
-    });
-    if(checked){
-      $("#qtoMacaDT").value = (getQto(getDay(dayId), qtoId)?.admissao?.dataHora || nowLocalISODateTime());
-    }else{
-      $("#qtoMacaNumero").value = "";
-      $("#qtoAdmNome").value = "";
-      $("#qtoMacaDT").value = "";
-      setQtoAdmButtons("");
-    }
-  });
-  $("#qtoMacaNumero").addEventListener("input", e=>{
-    const valor = sanitizeInteger(e.target.value, 10);
-    e.target.value = valor;
-    apply(n=>{ n.admissao.macaNumero = valor; });
-  });
-  $("#qtoAdmNome").addEventListener("input", e=>apply(n=>{ n.admissao.nome = e.target.value; }));
-  $("#qtoMacaDT").addEventListener("input", e=>apply(n=>{ n.admissao.dataHora = e.target.value; }));
-  $("#qtoAdmMed").onclick = ()=>{ apply(n=>{ n.admissao.tipo = "medico"; }); setQtoAdmButtons("medico"); };
-  $("#qtoAdmEnf").onclick = ()=>{ apply(n=>{ n.admissao.tipo = "enfermeiro"; }); setQtoAdmButtons("enfermeiro"); };
   $("#saveQtoBtn").onclick = ()=>{
     draft.status = "saved";
     updateQto(day.id, qto.id, draft, { render:true });
     setToast("QTO salvo.");
   };
   wireHoldToDelete(()=>{ deleteQto(day.id, qto.id); location.hash = `#/day/${day.id}`; });
-  function setQtoAdmButtons(tipo){
-    $("#qtoAdmMed").classList.toggle("on", tipo === "medico");
-    $("#qtoAdmEnf").classList.toggle("on", tipo === "enfermeiro");
-  }
-  function syncQtoMacaFields(checked){
-    $("#qtoMacaWrap").style.display = checked ? "block" : "none";
-    ["#qtoMacaNumero", "#qtoAdmNome", "#qtoMacaDT", "#qtoAdmMed", "#qtoAdmEnf"].forEach(sel=>{
-      const el = $(sel);
-      if(el) el.disabled = !checked;
-    });
-  }
 }
 function favoriteField(label, kind, favKey, idBase){
   const inputId = `fav_${idBase}_input`;
@@ -1428,38 +1279,6 @@ function showResumoModal(day, ev){
       ta.focus(); ta.select();
       document.execCommand("copy");
       setToast("Resumo copiado.");
-    }
-  };
-}
-function showQtoResumoModal(day, qto){
-  const text = generateQtoResumo(day, qto);
-  const modal = openModal(`
-    <div class="modal" role="dialog" aria-modal="true">
-      <div class="modal-header">
-        <div class="modal-title">Resumo do QTO</div>
-        <button class="btn ghost" id="closeQtoResumo" type="button">✕</button>
-      </div>
-      <div class="modal-body">
-        <textarea class="textarea" id="qtoResumoTA" rows="16" readonly>${escapeHTML(text)}</textarea>
-        <div class="muted" style="margin-top:8px">Dica: você pode copiar e colar esse texto onde precisar.</div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn ghost" id="fecharQtoResumo" type="button">Fechar</button>
-        <button class="btn primary" id="copyQtoResumo" type="button">Copiar</button>
-      </div>
-    </div>
-  `);
-  modal.querySelector("#closeQtoResumo").onclick = ()=>closeModal(modal);
-  modal.querySelector("#fecharQtoResumo").onclick = ()=>closeModal(modal);
-  modal.querySelector("#copyQtoResumo").onclick = async ()=>{
-    const ta = modal.querySelector("#qtoResumoTA");
-    try{
-      await navigator.clipboard.writeText(ta.value);
-      setToast("Resumo do QTO copiado.");
-    }catch{
-      ta.focus(); ta.select();
-      document.execCommand("copy");
-      setToast("Resumo do QTO copiado.");
     }
   };
 }
