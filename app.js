@@ -1260,11 +1260,12 @@ function renderQto(app, dayId, qtoId){
   $("#qtoEndereco").value = qto.endereco || "";
   $("#qtoObs").value = qto.observacoes || "";
   const adm = qto.admissao || {};
-  $("#qtoMacaRetida").checked = !!adm.macaRetida;
+  const macaCheckedInitial = !!adm.macaRetida;
+  $("#qtoMacaRetida").checked = macaCheckedInitial;
   $("#qtoMacaNumero").value = sanitizeInteger(adm.macaNumero || "", 10);
   $("#qtoAdmNome").value = adm.nome || "";
   $("#qtoMacaDT").value = adm.dataHora || "";
-  $("#qtoMacaWrap").style.display = $("#qtoMacaRetida").checked ? "block" : "none";
+  syncQtoMacaFields(macaCheckedInitial);
   setQtoAdmButtons(adm.tipo || "");
   draft = safeClone(ensureQtoShape(getQto(getDay(dayId), qtoId) || qto));
   const apply = (mutate)=>{
@@ -1276,7 +1277,7 @@ function renderQto(app, dayId, qtoId){
   $("#qtoObs").addEventListener("input", e=>apply(n=>{ n.observacoes = e.target.value; }));
   $("#qtoMacaRetida").addEventListener("change", e=>{
     const checked = e.target.checked;
-    $("#qtoMacaWrap").style.display = checked ? "block" : "none";
+    syncQtoMacaFields(checked);
     apply(n=>{
       n.admissao.macaRetida = checked;
       if(checked && !n.admissao.dataHora) n.admissao.dataHora = nowLocalISODateTime();
@@ -1314,6 +1315,13 @@ function renderQto(app, dayId, qtoId){
   function setQtoAdmButtons(tipo){
     $("#qtoAdmMed").classList.toggle("on", tipo === "medico");
     $("#qtoAdmEnf").classList.toggle("on", tipo === "enfermeiro");
+  }
+  function syncQtoMacaFields(checked){
+    $("#qtoMacaWrap").style.display = checked ? "block" : "none";
+    ["#qtoMacaNumero", "#qtoAdmNome", "#qtoMacaDT", "#qtoAdmMed", "#qtoAdmEnf"].forEach(sel=>{
+      const el = $(sel);
+      if(el) el.disabled = !checked;
+    });
   }
 }
 function favoriteField(label, kind, favKey, idBase){
