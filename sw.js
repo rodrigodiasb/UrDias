@@ -1,9 +1,9 @@
-const CACHE = "triagem-gu-static-v15";
+const CACHE = "triagem-gu-static-v16";
 const ASSETS = [
   "./",
-  "./index.html?v=15",
-  "./styles.css?v=15",
-  "./app.js?v=15",
+  "./index.html?v=16",
+  "./styles.css?v=16",
+  "./app.js?v=16",
   "./db.js",
   "./manifest.webmanifest",
   "./pwa-192.png",

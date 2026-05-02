@@ -784,8 +784,7 @@ function generateQtoResumo(day, qto){
     linhas.push("Observações:");
     linhas.push(qto.observacoes);
   }
-  return linhas.join("
-");
+  return linhas.join("\n");
 }
 function renderEval(app, dayId, evId){
   const day = getDay(dayId);
