@@ -112,7 +112,7 @@ function maskCPF(input){
 }
 /* ---------------- state ---------------- */
 const defaultState = () => ({
-  version: 15,
+  version: 21,
   lastSavedAt: null,
   days: [],
   favorites: { reguladores: [], unidades: [] }
@@ -263,7 +263,7 @@ function normalizeState(state){
       unidades: state?.favorites?.unidades || []
     }
   };
-  next.version = 15;
+  next.version = 21;
   next.days = (state?.days || []).map(day => ({
     ...day,
     evaluations: (day.evaluations || []).map(ensureEvaluationShape),
@@ -281,7 +281,7 @@ async function init(){
   const loaded = await loadState();
   if(loaded){
     STATE = normalizeState(loaded);
-    if((loaded.version || 0) < 15) saveState(STATE).catch(()=>{});
+    if((loaded.version || 0) < 21) saveState(STATE).catch(()=>{});
   }else{
     STATE = defaultState();
   }
@@ -610,8 +610,9 @@ function renderDay(app, dayId){
       </div>
       <div class="list" id="evalList"></div>
       ${qtoMode ? `` : `
-        <div style="margin-top:12px">
+        <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap">
           ${btn("Copiar todos protocolos","ghost",`type="button" id="copyProtocolsBtn"`)}
+          ${btn("Gerar PDF com atendimentos","ghost",`type="button" id="pdfAtendimentosBtn"`)}
         </div>
       `}
     </main>
@@ -689,6 +690,7 @@ function renderDay(app, dayId){
   $("#q").addEventListener("input", renderList);
   $("#clearQBtn").onclick = ()=>{ $("#q").value=""; renderList(); };
   if(!qtoMode && $("#copyProtocolsBtn")) $("#copyProtocolsBtn").onclick = ()=>showCopyProtocolsModal(day);
+  if(!qtoMode && $("#pdfAtendimentosBtn")) $("#pdfAtendimentosBtn").onclick = ()=>generateAtendimentosPdf(day);
   renderList();
 }
 function generateResumo(day, ev){
@@ -1401,6 +1403,95 @@ function wireHoldToDelete(onConfirm){
   });
   ["pointerup","pointerleave","pointercancel"].forEach(evt=>btn.addEventListener(evt, stop));
 }
+
+function buildAtendimentosPdfHtml(day, evaluations){
+  const generatedAt = formatDateTimeBR(nowLocalISODateTime());
+  const pages = evaluations.map((ev, index)=>{
+    const resumo = generateResumo(day, ev);
+    const protocolo = String(ev.protocolo || '').trim() || '-';
+    const nome = displayName(ev);
+    const unidade = String(ev.regulacao?.unidade || '').trim();
+    const startedAt = formatTimeBR(ev.startedAt || toLocalISODateTimeFromTimestamp(ev.createdAt)) || '-';
+    return `
+      <section class="pdf-page">
+        <div class="pdf-page__eyebrow">Atendimento ${index + 1} de ${evaluations.length}</div>
+        <div class="pdf-page__title">Resumo do atendimento</div>
+        <div class="pdf-meta">
+          <div><span>Viatura:</span> ${escapeHTML(day?.viatura || '-')}</div>
+          <div><span>Data do plantão:</span> ${escapeHTML(day?.dateISO ? formatDateBR(day.dateISO) : '-')}</div>
+          <div><span>Protocolo:</span> ${escapeHTML(protocolo)}</div>
+          <div><span>Vítima:</span> ${escapeHTML(nome)}</div>
+          <div><span>Hora de início:</span> ${escapeHTML(startedAt)}</div>
+          <div><span>Unidade:</span> ${escapeHTML(unidade || '-')}</div>
+        </div>
+        <div class="pdf-separator">Início do atendimento ${index + 1}</div>
+        <pre class="pdf-resumo">${escapeHTML(resumo)}</pre>
+        <div class="pdf-footer-label">Fim do atendimento ${index + 1}</div>
+      </section>
+    `;
+  }).join('');
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Atendimentos ${escapeHTML(day?.viatura || '')} ${escapeHTML(day?.dateISO ? formatDateBR(day.dateISO) : '')}</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #eef2f7; color: #111827; font-family: Arial, Helvetica, sans-serif; }
+    .screen-note { max-width: 210mm; margin: 16px auto 0; background: #fff8db; color: #7c5b00; border: 1px solid #efd58a; border-radius: 12px; padding: 12px 14px; }
+    .print-wrap { width: 210mm; margin: 0 auto; padding: 10mm 0; }
+    .pdf-page { width: 190mm; min-height: 277mm; margin: 0 auto 10mm; background: #fff; border: 2px solid #111827; border-radius: 14px; padding: 12mm; page-break-after: always; break-after: page; box-shadow: 0 10px 30px rgba(15, 23, 42, .08); }
+    .pdf-page:last-child { page-break-after: auto; break-after: auto; }
+    .pdf-page__eyebrow { display: inline-block; background: #111827; color: #fff; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 6px 10px; border-radius: 999px; }
+    .pdf-page__title { margin-top: 12px; font-size: 24px; font-weight: 800; }
+    .pdf-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin-top: 14px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 12px; background: #f8fafc; }
+    .pdf-meta div { font-size: 13px; line-height: 1.35; }
+    .pdf-meta span { font-weight: 700; }
+    .pdf-separator, .pdf-footer-label { margin-top: 14px; text-align: center; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #0f172a; }
+    .pdf-separator::before, .pdf-separator::after, .pdf-footer-label::before, .pdf-footer-label::after { content: ''; display: inline-block; width: 18%; height: 1px; background: #94a3b8; vertical-align: middle; margin: 0 8px; }
+    .pdf-resumo { margin: 16px 0 0; padding: 14px; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; white-space: pre-wrap; word-break: break-word; font-family: "Courier New", Courier, monospace; font-size: 13px; line-height: 1.5; }
+    @page { size: A4; margin: 10mm; }
+    @media print {
+      body { background: #fff; }
+      .screen-note { display: none; }
+      .print-wrap { width: auto; margin: 0; padding: 0; }
+      .pdf-page { width: auto; min-height: auto; margin: 0; border-radius: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="screen-note">PDF de atendimentos preparado em ${escapeHTML(generatedAt)}. Se a janela de impressão não abrir automaticamente, use <strong>Ctrl + P</strong> e escolha <strong>Salvar como PDF</strong>.</div>
+  <div class="print-wrap">${pages}</div>
+  <script>
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        try { window.print(); } catch (e) {}
+      }, 300);
+    });
+  <\/script>
+</body>
+</html>`;
+}
+function generateAtendimentosPdf(day){
+  const evaluations = (day?.evaluations || []);
+  if(!evaluations.length){
+    setToast('Nenhum atendimento para gerar PDF.');
+    return;
+  }
+  const popup = window.open('', '_blank');
+  if(!popup){
+    setToast('Permita pop-ups para gerar o PDF.');
+    return;
+  }
+  const html = buildAtendimentosPdfHtml(day, evaluations);
+  popup.document.open();
+  popup.document.write(html);
+  popup.document.close();
+  setToast('Documento preparado para salvar em PDF.');
+}
+
 function showResumoModal(day, ev){
   const text = generateResumo(day, ev);
   const modal = openModal(`
