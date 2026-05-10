@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /resultados/{docId} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.playerName is string
+        && request.resource.data.playerName.size() >= 1
+        && request.resource.data.playerName.size() <= 40
+        && request.resource.data.playerGroup is string
+        && request.resource.data.playerGroup.size() <= 40
+        && request.resource.data.score is number
+        && request.resource.data.score >= 0
+        && request.resource.data.correct is number
+        && request.resource.data.total is number
+        && request.resource.data.percent is number;
+      allow update, delete: if false;
+    }
+
+    match /recursos_questoes/{docId} {
+      allow read: if false;
+      allow create: if request.auth != null
+        && request.resource.data.questionId is number
+        && request.resource.data.playerName is string
+        && request.resource.data.reportText is string
+        && request.resource.data.reportText.size() >= 5
+        && request.resource.data.reportText.size() <= 700;
+      allow update, delete: if false;
+    }
+  }
+}
