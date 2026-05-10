@@ -1,115 +1,16 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <meta name="theme-color" content="#121633" />
-  <title>Quiz Terminologias Médicas</title>
-  <link rel="stylesheet" href="styles.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./favicon.ico" />
+  <title>Triagem GU</title>
+  <link rel="stylesheet" href="./styles.css?v=21" />
 </head>
 <body>
-  <main class="app-shell">
-    <section id="screenStart" class="screen active">
-      <div class="hero-card">
-        <div class="game-badge">APH • Trauma • Emergência</div>
-        <h1>Quiz<br><span>Terminologias Médicas</span></h1>
-        <p class="subtitle">Aprenda por repetição, raciocínio clínico e ranking de desempenho.</p>
-        <div class="player-form">
-          <label for="playerName">Nome do jogador</label>
-          <input id="playerName" maxlength="40" placeholder="Ex.: Ana Clara" autocomplete="name" />
-          <label for="playerGroup">Turma / Grupo</label>
-          <input id="playerGroup" maxlength="40" placeholder="Ex.: Técnico Enfermagem G1" />
-          <button id="btnStart" class="btn primary">Começar desafio</button>
-          <button id="btnShowRankStart" class="btn ghost">Ver ranking</button>
-          <p id="statusMessage" class="status-message">Carregando banco de perguntas...</p>
-        </div>
-      </div>
-      <div class="mini-rules">
-        <div><strong>10</strong><span>questões</span></div>
-        <div><strong>Ranking</strong><span>pontuação final</span></div>
-        <div><strong>Recurso</strong><span>revisão da questão</span></div>
-      </div>
-    </section>
-
-    <section id="screenGame" class="screen">
-      <header class="game-header">
-        <div>
-          <span class="small-label">Jogador</span>
-          <strong id="hudPlayer">---</strong>
-        </div>
-        <div class="score-pill">
-          <span>Pontos</span>
-          <strong id="hudScore">0</strong>
-        </div>
-      </header>
-
-      <div class="progress-wrap">
-        <div class="progress-info">
-          <span id="hudQuestionCount">Questão 1/10</span>
-          <span id="hudLevel">Desafio</span>
-        </div>
-        <div class="progress-bar"><div id="progressFill"></div></div>
-      </div>
-
-      <article class="question-card">
-        <div class="category-chip" id="hudCategory">Categoria</div>
-        <h2 id="questionText">Carregando pergunta...</h2>
-        <div id="answers" class="answers"></div>
-      </article>
-    </section>
-
-    <section id="screenFeedback" class="screen feedback-screen">
-      <div id="feedbackCard" class="feedback-card">
-        <div id="feedbackIcon" class="feedback-icon">✓</div>
-        <h2 id="feedbackTitle">Resposta correta!</h2>
-        <p id="feedbackExplanation"></p>
-        <button id="btnReport" class="btn ghost">Reportar / entrar com recurso</button>
-        <button id="btnNext" class="btn primary">Próxima pergunta</button>
-      </div>
-    </section>
-
-    <section id="screenResult" class="screen">
-      <div class="result-card">
-        <div class="trophy">🏆</div>
-        <h2>Desafio concluído</h2>
-        <p id="resultSummary">Resultado final</p>
-        <div class="result-grid">
-          <div><strong id="resultScore">0</strong><span>Pontos</span></div>
-          <div><strong id="resultCorrect">0</strong><span>Acertos</span></div>
-          <div><strong id="resultPercent">0%</strong><span>Aproveitamento</span></div>
-        </div>
-        <button id="btnRestart" class="btn primary">Jogar novamente</button>
-        <button id="btnShowRank" class="btn ghost">Ver ranking</button>
-      </div>
-    </section>
-
-    <section id="screenRank" class="screen">
-      <div class="rank-card">
-        <div class="rank-header">
-          <div>
-            <span class="small-label">Ranking</span>
-            <h2>Melhores pontuações</h2>
-          </div>
-          <button id="btnBackHome" class="icon-btn">×</button>
-        </div>
-        <div id="rankList" class="rank-list"></div>
-      </div>
-    </section>
-  </main>
-
-  <dialog id="reportDialog" class="dialog">
-    <form method="dialog" class="dialog-content">
-      <h3>Reportar questão</h3>
-      <p>Use este espaço para justificar divergência, sugerir ajuste ou complementar a explicação.</p>
-      <textarea id="reportText" rows="5" maxlength="700" placeholder="Descreva o recurso da questão..."></textarea>
-      <div class="dialog-actions">
-        <button value="cancel" class="btn ghost">Cancelar</button>
-        <button id="btnSendReport" value="default" class="btn primary">Enviar recurso</button>
-      </div>
-    </form>
-  </dialog>
-
-  <script src="firebase-config.js"></script>
-  <script type="module" src="app.js"></script>
+  <div id="app"></div>
+  <script type="module" src="./app.js?v=21"></script>
 </body>
 </html>
