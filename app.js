@@ -112,7 +112,7 @@ function maskCPF(input){
 }
 /* ---------------- state ---------------- */
 const defaultState = () => ({
-  version: 21,
+  version: 22,
   lastSavedAt: null,
   days: [],
   favorites: { reguladores: [], unidades: [] }
@@ -145,21 +145,58 @@ function isQtoViatura(viatura=""){
     new RegExp(`^${prefix}\\d`).test(v)
   ));
 }
+const OCCURRENCE_TYPES = {
+  exterminio: "Extermínio de insetos",
+  sinistro: "Sinistro de trânsito",
+  incendio: "Combate a incêndio",
+  outros: "Outros"
+};
+function getOccurrenceLabel(type=""){
+  return OCCURRENCE_TYPES[type] || "Outros";
+}
+function getQtoDisplayName(qto){
+  const nome = (qto?.pessoa?.nome || "").trim();
+  return nome ? nome : "Não identificado";
+}
+function ensureVehicleShape(vehicle={}){
+  return {
+    id: vehicle.id || uid("veic"),
+    placa: vehicle.placa || "",
+    modelo: vehicle.modelo || "",
+    marca: vehicle.marca || "",
+    condutor: vehicle.condutor || ""
+  };
+}
+function ensureTrafficVictimShape(victim={}){
+  return {
+    id: victim.id || uid("vit"),
+    nome: victim.nome || "",
+    documento: onlyDigits(victim.documento || ""),
+    nascimento: victim.nascimento || "",
+    idade: victim.idade || "",
+    vehicleId: victim.vehicleId || ""
+  };
+}
 function ensureQtoShape(qto={}){
   return {
     ...qto,
+    type: qto.type || "outros",
     startedAt: qto.startedAt || toLocalISODateTimeFromTimestamp(qto.createdAt) || nowLocalISODateTime(),
     status: qto.status || "draft",
+    protocolo: onlyDigits(qto.protocolo || ""),
     endereco: qto.endereco || "",
-    observacoes: qto.observacoes || "",
-    admissao: {
-      tipo: "",
+    gps: qto.gps || "",
+    pessoa: {
       nome: "",
-      macaRetida: false,
-      macaNumero: "",
-      dataHora: "",
-      ...(qto.admissao || {})
-    }
+      documento: "",
+      nascimento: "",
+      idade: "",
+      ...(qto.pessoa || {})
+    },
+    evolucao: qto.evolucao || qto.observacoes || "",
+    observacoes: qto.observacoes || qto.evolucao || "",
+    veiculos: (qto.veiculos || []).map(ensureVehicleShape),
+    vitimas: (qto.vitimas || []).map(ensureTrafficVictimShape)
   };
 }
 function getProcedimentosSelecionados(procedimentos={}){
@@ -263,7 +300,7 @@ function normalizeState(state){
       unidades: state?.favorites?.unidades || []
     }
   };
-  next.version = 21;
+  next.version = 22;
   next.days = (state?.days || []).map(day => ({
     ...day,
     evaluations: (day.evaluations || []).map(ensureEvaluationShape),
@@ -281,7 +318,7 @@ async function init(){
   const loaded = await loadState();
   if(loaded){
     STATE = normalizeState(loaded);
-    if((loaded.version || 0) < 21) saveState(STATE).catch(()=>{});
+    if((loaded.version || 0) < 22) saveState(STATE).catch(()=>{});
   }else{
     STATE = defaultState();
   }
@@ -375,22 +412,21 @@ function createEvaluation(dayId){
   });
   return ev.id;
 }
-function createQto(dayId){
+function createQto(dayId, type="outros"){
   const qto = ensureQtoShape({
     id: uid("qto"),
+    type,
     status: "draft",
     createdAt: Date.now(),
     updatedAt: Date.now(),
     startedAt: nowLocalISODateTime(),
+    protocolo: "",
     endereco: "",
-    observacoes: "",
-    admissao: {
-      tipo: "",
-      nome: "",
-      macaRetida: false,
-      macaNumero: "",
-      dataHora: ""
-    }
+    gps: "",
+    pessoa: { nome:"", documento:"", nascimento:"", idade:"" },
+    evolucao: "",
+    veiculos: [],
+    vitimas: []
   });
   setState(s=>{
     const d = (s.days||[]).find(x=>x.id===dayId);
@@ -597,59 +633,71 @@ function renderDay(app, dayId){
     return;
   }
   const qtoMode = isQtoViatura(day.viatura || "");
-  const right = btn(qtoMode ? "+ QTO" : "+ Avaliação","primary",`type="button" id="newRecordBtn"`);
   const left = btn("←","ghost",`type="button" id="backBtn"`);
-  const countIntegrantes = (day.integrantesText||"").split("\n").map(x=>x.trim()).filter(Boolean).length;
+  const right = qtoMode ? "" : btn("+ Avaliação","primary",`type="button" id="newRecordBtn"`);
+  const countIntegrantes = (day.integrantesText||"").split("
+").map(x=>x.trim()).filter(Boolean).length;
   app.innerHTML = topbar({title:`${formatDateBR(day.dateISO)} — ${day.viatura||"Sem viatura"}`, left, right}) + `
     <main class="content">
       <div class="muted">${countIntegrantes} integrante(s)</div>
-      ${qtoMode ? `<div class="hint" style="margin-top:8px">Viatura identificada como ${escapeHTML(day.viatura||"")}. Neste dia, o fluxo seguirá por <b>QTO</b>.</div>` : ``}
+      ${qtoMode ? `
+        <div class="hint" style="margin-top:8px">Viatura identificada como <b>${escapeHTML(day.viatura||"")}</b>. Escolha abaixo o tipo de ocorrência para adicionar um novo registro.</div>
+        <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap">
+          ${btn("+ Extermínio de insetos","ghost",`type="button" id="newExterminioBtn" style="font-size:12px; padding:8px 10px"`)}
+          ${btn("+ Sinistro de trânsito","ghost",`type="button" id="newSinistroBtn" style="font-size:12px; padding:8px 10px"`)}
+          ${btn("+ Combate a incêndio","ghost",`type="button" id="newIncendioBtn" style="font-size:12px; padding:8px 10px"`)}
+          ${btn("+ Outros","ghost",`type="button" id="newOutrosBtn" style="font-size:12px; padding:8px 10px"`)}
+        </div>
+      ` : ``}
       <div class="searchbar">
-        <input class="input" id="q" placeholder="${qtoMode ? 'Buscar QTO…' : 'Buscar por protocolo, nome ou documento…'}" />
+        <input class="input" id="q" placeholder="${qtoMode ? 'Buscar por tipo, protocolo, nome ou documento…' : 'Buscar por protocolo, nome ou documento…'}" />
         ${btn("Limpar","ghost",`type="button" id="clearQBtn"`)}
       </div>
       <div class="list" id="evalList"></div>
-      ${qtoMode ? `` : `
-        <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap">
-          ${btn("Copiar todos protocolos","ghost",`type="button" id="copyProtocolsBtn"`)}
-          ${btn("Gerar PDF com atendimentos","ghost",`type="button" id="pdfAtendimentosBtn"`)}
-        </div>
-      `}
+      <div class="row" style="margin-top:12px; gap:8px; flex-wrap:wrap">
+        ${btn("Copiar todos os protocolos","ghost",`type="button" id="copyProtocolsBtn"`)}
+        ${btn("Gerar PDF com atendimentos","ghost",`type="button" id="pdfAtendimentosBtn"`)}
+      </div>
     </main>
     ${toast(TOAST)}
   `;
   $("#backBtn").onclick = ()=>location.hash="#/";
-  $("#newRecordBtn").onclick = ()=>{
-    if(qtoMode){
-      const qtoId = createQto(day.id);
-      location.hash = `#/day/${day.id}/qto/${qtoId}`;
-      return;
-    }
-    const evId = createEvaluation(day.id);
-    location.hash = `#/day/${day.id}/ev/${evId}`;
-  };
+  if(!qtoMode && $("#newRecordBtn")){
+    $("#newRecordBtn").onclick = ()=>{
+      const evId = createEvaluation(day.id);
+      location.hash = `#/day/${day.id}/ev/${evId}`;
+    };
+  }
+  if(qtoMode){
+    $("#newExterminioBtn").onclick = ()=>{ const qtoId = createQto(day.id, "exterminio"); location.hash = `#/day/${day.id}/qto/${qtoId}`; };
+    $("#newSinistroBtn").onclick = ()=>{ const qtoId = createQto(day.id, "sinistro"); location.hash = `#/day/${day.id}/qto/${qtoId}`; };
+    $("#newIncendioBtn").onclick = ()=>{ const qtoId = createQto(day.id, "incendio"); location.hash = `#/day/${day.id}/qto/${qtoId}`; };
+    $("#newOutrosBtn").onclick = ()=>{ const qtoId = createQto(day.id, "outros"); location.hash = `#/day/${day.id}/qto/${qtoId}`; };
+  }
   const listEl = $("#evalList");
   const renderList = ()=>{
     const q = normalizeForSearch($("#q").value);
     if(qtoMode){
-      const list = (day.qtos||[]).filter((qto, index)=>{
+      const list = (day.qtos||[]).filter(qto=>{
         if(!q) return true;
-        const label = normalizeForSearch(`QTO ${index+1}`);
-        const obs = normalizeForSearch(qto.observacoes || "");
-        return label.includes(q) || obs.includes(q);
+        const type = normalizeForSearch(getOccurrenceLabel(qto.type));
+        const protocolo = normalizeForSearch(qto.protocolo || "");
+        const nome = normalizeForSearch(getQtoDisplayName(qto));
+        const doc = normalizeForSearch(qto.pessoa?.documento || "");
+        return type.includes(q) || protocolo.includes(q) || nome.includes(q) || doc.includes(q);
       });
       if(list.length===0){
-        listEl.innerHTML = card(`<div class="title">Nenhum QTO</div><div class="muted">Toque em <b>+ QTO</b> para validar o novo fluxo.</div>`);
+        listEl.innerHTML = card(`<div class="title">Nenhum registro</div><div class="muted">Use um dos botões acima para criar uma ocorrência.</div>`);
         return;
       }
-      listEl.innerHTML = list.map((qto, index)=>{
+      listEl.innerHTML = list.map(qto=>{
         const st = qto.status==="saved" ? pill("FINAL","ok") : pill("DRAFT","draft");
-        const created = formatTimeBR(qto.startedAt || toLocalISODateTimeFromTimestamp(qto.createdAt)) || "--:--";
+        const started = formatTimeBR(qto.startedAt || toLocalISODateTimeFromTimestamp(qto.createdAt)) || "--:--";
         return card(`
           <div class="row space">
             <div>
-              <div class="title">${escapeHTML(`QTO ${index+1}`)}</div>
-              <div class="muted">${qto.status==="saved"?"✅ Salvo":"📝 Rascunho"} • iniciado às ${escapeHTML(created)}</div>
+              <div class="title">${escapeHTML(qto.protocolo||"Sem protocolo")} — ${escapeHTML(getQtoDisplayName(qto))}</div>
+              <div class="muted">${escapeHTML(getOccurrenceLabel(qto.type))} • ${qto.status==="saved"?"✅ Salvo":"📝 Rascunho"} • iniciado às ${escapeHTML(started)}</div>
             </div>
             ${st}
           </div>
@@ -689,8 +737,8 @@ function renderDay(app, dayId){
   };
   $("#q").addEventListener("input", renderList);
   $("#clearQBtn").onclick = ()=>{ $("#q").value=""; renderList(); };
-  if(!qtoMode && $("#copyProtocolsBtn")) $("#copyProtocolsBtn").onclick = ()=>showCopyProtocolsModal(day);
-  if(!qtoMode && $("#pdfAtendimentosBtn")) $("#pdfAtendimentosBtn").onclick = ()=>generateAtendimentosPdf(day);
+  if($("#copyProtocolsBtn")) $("#copyProtocolsBtn").onclick = ()=>showCopyProtocolsModal(day);
+  if($("#pdfAtendimentosBtn")) $("#pdfAtendimentosBtn").onclick = ()=>generateAtendimentosPdf(day);
   renderList();
 }
 function generateResumo(day, ev){
@@ -766,25 +814,48 @@ function generateResumo(day, ev){
 function generateQtoResumo(day, qto){
   const linhas = [];
   const inicio = qto.startedAt || toLocalISODateTimeFromTimestamp(qto.createdAt);
-  linhas.push(`QTO: ${day?.viatura || "-"}`);
+  linhas.push(`Tipo de ocorrência: ${getOccurrenceLabel(qto.type)}`);
+  linhas.push(`Protocolo: ${qto.protocolo || "-"}`);
   if(qto.endereco) linhas.push(`Endereço: ${qto.endereco}`);
   linhas.push(`Data: ${day?.dateISO ? formatDateBR(day.dateISO) : "-"}`);
   linhas.push(`Hora de início: ${inicio ? formatTimeBR(inicio) : "-"}`);
-  const adm = qto.admissao || {};
-  if(adm.macaRetida){
-    const numero = sanitizeInteger(adm.macaNumero || "", 10) || "-";
-    const profissao = formatProfissaoInclusiva(adm.tipo);
-    const nome = String(adm.nome || "").trim();
-    const dt = adm.dataHora ? formatDateTimeBR(adm.dataHora) : "-";
+  linhas.push("");
+  linhas.push(`Nome: ${getQtoDisplayName(qto)}`);
+  linhas.push(`Documento: ${qto.pessoa?.documento || "-"}`);
+  if(qto.pessoa?.nascimento) linhas.push(`Data de nascimento: ${formatNascimentoInput(qto.pessoa.nascimento)}`);
+  if(String(qto.pessoa?.idade||"").trim()) linhas.push(`Idade: ${qto.pessoa.idade} ano(s)`);
+  if(qto.gps) linhas.push(`GPS: ${qto.gps}`);
+  if(qto.type === "sinistro"){
     linhas.push("");
-    linhas.push(`Maca ${numero} retida pelo(a) ${profissao}${nome ? " " + nome : ""} em ${dt}`);
-  }
-  if(qto.observacoes){
+    linhas.push("Veículos envolvidos:");
+    if((qto.veiculos||[]).length){
+      (qto.veiculos||[]).forEach((veiculo, index)=>{
+        linhas.push(`${index + 1}. Placa: ${veiculo.placa || "-"} | Marca: ${veiculo.marca || "-"} | Modelo: ${veiculo.modelo || "-"} | Condutor: ${veiculo.condutor || "-"}`);
+      });
+    }else{
+      linhas.push("Nenhum veículo informado.");
+    }
     linhas.push("");
-    linhas.push("Observações:");
-    linhas.push(qto.observacoes);
+    linhas.push("Vítimas vinculadas:");
+    if((qto.vitimas||[]).length){
+      (qto.vitimas||[]).forEach((vitima, index)=>{
+        const veiculo = (qto.veiculos||[]).find(v => v.id === vitima.vehicleId);
+        const vinculo = veiculo ? `${veiculo.placa || veiculo.modelo || veiculo.marca || "Veículo informado"}` : "Sem vínculo";
+        const doc = vitima.documento || "-";
+        const idade = String(vitima.idade || "").trim() ? ` | Idade: ${vitima.idade}` : "";
+        const nasc = vitima.nascimento ? ` | Nascimento: ${formatNascimentoInput(vitima.nascimento)}` : "";
+        linhas.push(`${index + 1}. ${vitima.nome || "Não identificado"} | Documento: ${doc}${idade}${nasc} | Veículo: ${vinculo}`);
+      });
+    }else{
+      linhas.push("Nenhuma vítima vinculada.");
+    }
+  }else if(String(qto.evolucao || "").trim()){
+    linhas.push("");
+    linhas.push("Evolução:");
+    linhas.push(qto.evolucao);
   }
-  return linhas.join("\n");
+  return linhas.join("
+");
 }
 function renderEval(app, dayId, evId){
   const day = getDay(dayId);
@@ -1218,45 +1289,61 @@ function renderQto(app, dayId, qtoId){
   const day = getDay(dayId);
   const qto = getQto(day, qtoId);
   if(!day || !qto){
-    app.innerHTML = topbar({title:"QTO não encontrado", left:btn("←","ghost",`type="button" id="backBtn"`)}) +
-      `<main class="content"><div class="muted">Este QTO não existe (ou foi excluído).</div></main>`;
+    app.innerHTML = topbar({title:"Registro não encontrado", left:btn("←","ghost",`type="button" id="backBtn"`)}) +
+      `<main class="content"><div class="muted">Este registro não existe (ou foi excluído).</div></main>`;
     $("#backBtn").onclick = ()=>location.hash = `#/day/${dayId}`;
     return;
   }
   let draft = safeClone(ensureQtoShape(qto));
   const left = btn("←","ghost",`type="button" id="backBtn"`);
   const right = btn("🧾 Resumo","ghost",`type="button" id="resumoQtoBtn"`);
-  app.innerHTML = topbar({title:`QTO — ${day.viatura||"Sem viatura"}`, left, right}) + `
+  const occurrenceLabel = getOccurrenceLabel(qto.type);
+  app.innerHTML = topbar({title:`${occurrenceLabel} — ${qto.protocolo||"Sem protocolo"}`, left, right}) + `
     <main class="content">
       <div class="autosave">
         <div class="row"><span class="dot"></span><span class="muted">Salvamento automático (offline)</span></div>
         ${qto.status==="saved"?pill("FINAL","ok"):pill("DRAFT","draft")}
       </div>
       ${section("1) Informações gerais", `
+        ${field("Protocolo", `<input class="input" id="qtoProtocolo" inputmode="numeric" pattern="[0-9]*" placeholder="Ex.: 2026000123" />`)}
         ${field("Endereço", `<textarea class="textarea" id="qtoEndereco" rows="3" placeholder="Rua, número, bairro, referência..."></textarea>`)}
         <div class="row" style="justify-content:flex-end; margin-top:8px">
           ${btn("🗺 Abrir no Maps","",`type="button" id="qtoMapsBtn"`)}
         </div>
-      `)}
-      ${section("2) Retenção de maca", `
-        <label class="check"><input type="checkbox" id="qtoMacaRetida" /> <span>Maca retida</span></label>
-        <div id="qtoMacaWrap" style="display:none; margin-top:10px">
-          ${field("Número da maca", `<input class="input" id="qtoMacaNumero" inputmode="numeric" pattern="[0-9]*" placeholder="Ex.: 5" />`, `Preencha apenas o número da maca.`)}
-          ${field("Profissão de quem reteve", `
-            <div class="seg">
-              <button type="button" id="qtoAdmMed">Médico(a)</button>
-              <button type="button" id="qtoAdmEnf">Enfermeiro(a)</button>
-            </div>
-          `)}
-          ${field("Nome do profissional", `<input class="input" id="qtoAdmNome" placeholder="Nome do profissional" />`)}
-          ${field("Data/hora da retenção", `<input class="input" type="datetime-local" id="qtoMacaDT" />`)}
+        <div class="row space">
+          <div class="muted" id="qtoGpsLabel">${qto.gps?escapeHTML("GPS: "+qto.gps):"Sem GPS registrado."}</div>
+          ${btn("📍 Usar GPS","",`type="button" id="qtoGpsBtn"`)}
         </div>
       `)}
-      ${section("3) Observações", `
-        ${field("Observações", `<textarea class="textarea" id="qtoObs" rows="5" placeholder="Observações adicionais do QTO..."></textarea>`)}
+      ${section("2) Dados pessoais", `
+        ${field("Nome", `<input class="input" id="qtoNome" placeholder="Nome completo (se houver)" />`, `Se vazio, aparecerá como "Não identificado".`)}
+        ${field("CPF ou Documento", `<input class="input" id="qtoDoc" inputmode="numeric" pattern="[0-9]*" placeholder="Digite apenas números" />`, `<span class="hint">Aceita apenas números.</span>`)}
+        <div class="grid2">
+          <div class="card">
+            <div class="title">Data de nascimento</div>
+            <input class="input" id="qtoNasc" inputmode="numeric" placeholder="DDMMAAAA ou DDMMAA" />
+            <div class="muted" style="margin-top:6px">Digite numericamente. Ex.: 04041994 ou 040494.</div>
+          </div>
+          <div class="card">
+            <div class="title">Idade</div>
+            <input class="input" id="qtoIdade" inputmode="numeric" placeholder="anos" />
+            <div class="muted" style="margin-top:6px">Se preencher a idade, a data de nascimento fica opcional.</div>
+          </div>
+        </div>
       `)}
+      ${qto.type === "sinistro" ? section("3) Veículos envolvidos", `
+        <div class="row" style="justify-content:flex-end; margin-bottom:8px">${btn("+ Adicionar veículo","ghost",`type="button" id="addVeiculoBtn"`)}</div>
+        <div id="veiculosList"></div>
+      `) : ""}
+      ${qto.type === "sinistro" ? section("4) Vítimas envolvidas", `
+        <div class="row" style="justify-content:flex-end; margin-bottom:8px">${btn("+ Adicionar vítima","ghost",`type="button" id="addVitimaBtn"`)}</div>
+        <div id="vitimasList"></div>
+      `) : ""}
+      ${qto.type !== "sinistro" ? section("3) Evolução", `
+        ${field("Evolução", `<textarea class="textarea" id="qtoEvolucao" rows="7" placeholder="Descreva a evolução e o que foi feito por hora..."></textarea>`)}
+      `) : ""}
       <div class="footerbar">
-        ${btn("Salvar QTO","primary",`type="button" id="saveQtoBtn"`)}
+        ${btn("Salvar registro","primary",`type="button" id="saveQtoBtn"`)}
         <button class="btn danger" type="button" id="holdDelBtn">
           <span>Segure para excluir</span>
           <span class="holdbar" id="holdBar" style="transform:scaleX(0)"></span>
@@ -1268,72 +1355,189 @@ function renderQto(app, dayId, qtoId){
   `;
   $("#backBtn").onclick = ()=>location.hash = `#/day/${day.id}`;
   $("#resumoQtoBtn").onclick = ()=>showQtoResumoModal(day, getQto(getDay(dayId), qtoId) || draft);
+
+  $("#qtoProtocolo").value = onlyDigits(qto.protocolo||"");
   $("#qtoEndereco").value = qto.endereco || "";
-  $("#qtoObs").value = qto.observacoes || "";
-  const adm = qto.admissao || {};
-  const macaCheckedInitial = !!adm.macaRetida;
-  $("#qtoMacaRetida").checked = macaCheckedInitial;
-  $("#qtoMacaNumero").value = sanitizeInteger(adm.macaNumero || "", 10);
-  $("#qtoAdmNome").value = adm.nome || "";
-  $("#qtoMacaDT").value = adm.dataHora || "";
-  syncQtoMacaFields(macaCheckedInitial);
-  setQtoAdmButtons(adm.tipo || "");
+  $("#qtoNome").value = qto.pessoa?.nome || "";
+  $("#qtoDoc").value = onlyDigits(qto.pessoa?.documento || "");
+  $("#qtoNasc").value = formatNascimentoInput(qto.pessoa?.nascimento || "");
+  $("#qtoIdade").value = qto.pessoa?.idade || "";
+  if($("#qtoEvolucao")) $("#qtoEvolucao").value = qto.evolucao || "";
   draft = safeClone(ensureQtoShape(getQto(getDay(dayId), qtoId) || qto));
+
   const apply = (mutate)=>{
     mutate(draft);
+    draft = ensureQtoShape(draft);
     updateQto(day.id, qto.id, draft, { render:false });
+    renderLists();
   };
+
+  const syncQtoGpsLabel = ()=>{
+    const text = draft.gps ? `GPS: ${draft.gps}` : "Sem GPS registrado.";
+    $("#qtoGpsLabel").textContent = text;
+  };
+
+  $("#qtoProtocolo").addEventListener("input", e=>{
+    const valor = onlyDigits(e.target.value);
+    e.target.value = valor;
+    apply(n=>{ n.protocolo = valor; });
+  });
   $("#qtoEndereco").addEventListener("input", e=>apply(n=>{ n.endereco = e.target.value; }));
   $("#qtoMapsBtn").onclick = ()=>openAddressInMaps($("#qtoEndereco").value);
-  $("#qtoObs").addEventListener("input", e=>apply(n=>{ n.observacoes = e.target.value; }));
-  $("#qtoMacaRetida").addEventListener("change", e=>{
-    const checked = e.target.checked;
-    syncQtoMacaFields(checked);
-    apply(n=>{
-      n.admissao.macaRetida = checked;
-      if(checked && !n.admissao.dataHora) n.admissao.dataHora = nowLocalISODateTime();
-      if(!checked){
-        n.admissao.macaNumero = "";
-        n.admissao.tipo = "";
-        n.admissao.nome = "";
-        n.admissao.dataHora = "";
-      }
-    });
-    if(checked){
-      $("#qtoMacaDT").value = (getQto(getDay(dayId), qtoId)?.admissao?.dataHora || nowLocalISODateTime());
-    }else{
-      $("#qtoMacaNumero").value = "";
-      $("#qtoAdmNome").value = "";
-      $("#qtoMacaDT").value = "";
-      setQtoAdmButtons("");
-    }
-  });
-  $("#qtoMacaNumero").addEventListener("input", e=>{
-    const valor = sanitizeInteger(e.target.value, 10);
+  $("#qtoGpsBtn").onclick = ()=>{
+    if(!navigator.geolocation){ setToast("GPS não suportado neste aparelho."); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos)=>{
+        const lat = pos.coords.latitude.toFixed(6);
+        const lng = pos.coords.longitude.toFixed(6);
+        apply(n=>{ n.gps = `${lat}, ${lng}`; });
+        syncQtoGpsLabel();
+        setToast("GPS capturado.");
+      },
+      ()=>setToast("Não foi possível obter o GPS."),
+      { enableHighAccuracy:true, timeout:10000 }
+    );
+  };
+  $("#qtoNome").addEventListener("input", e=>apply(n=>{ n.pessoa.nome = e.target.value; }));
+  $("#qtoDoc").addEventListener("input", e=>{
+    const valor = onlyDigits(e.target.value);
     e.target.value = valor;
-    apply(n=>{ n.admissao.macaNumero = valor; });
+    apply(n=>{ n.pessoa.documento = valor; });
   });
-  $("#qtoAdmNome").addEventListener("input", e=>apply(n=>{ n.admissao.nome = e.target.value; }));
-  $("#qtoMacaDT").addEventListener("input", e=>apply(n=>{ n.admissao.dataHora = e.target.value; }));
-  $("#qtoAdmMed").onclick = ()=>{ apply(n=>{ n.admissao.tipo = "medico"; }); setQtoAdmButtons("medico"); };
-  $("#qtoAdmEnf").onclick = ()=>{ apply(n=>{ n.admissao.tipo = "enfermeiro"; }); setQtoAdmButtons("enfermeiro"); };
+  $("#qtoNasc").addEventListener("input", e=>{
+    const raw = onlyDigits(e.target.value).slice(0,8);
+    e.target.value = formatNascimentoInput(raw);
+    const parsed = parseNascimentoDigitado(raw);
+    apply(n=>{ n.pessoa.nascimento = parsed ? parsed.iso : raw; });
+  });
+  $("#qtoIdade").addEventListener("input", e=>{
+    const valor = onlyDigits(e.target.value).slice(0,3);
+    e.target.value = valor;
+    apply(n=>{ n.pessoa.idade = valor; });
+  });
+  if($("#qtoEvolucao")) $("#qtoEvolucao").addEventListener("input", e=>apply(n=>{ n.evolucao = e.target.value; n.observacoes = e.target.value; }));
+
+  function renderVeiculos(){
+    const host = $("#veiculosList");
+    if(!host) return;
+    const items = draft.veiculos || [];
+    if(!items.length){
+      host.innerHTML = card(`<div class="title">Nenhum veículo adicionado</div><div class="muted">Use o botão acima para incluir os veículos envolvidos.</div>`);
+      return;
+    }
+    host.innerHTML = items.map((veiculo, index)=>card(`
+      <div class="row space" style="margin-bottom:8px">
+        <div class="title">Veículo ${index + 1}</div>
+        ${btn("Remover","ghost",`type="button" data-del-veiculo="${veiculo.id}"`)}
+      </div>
+      <div class="grid2">
+        ${field("Placa", `<input class="input" data-veiculo="${veiculo.id}" data-field="placa" placeholder="ABC1234" value="${escapeHTML(veiculo.placa || "")}" />`)}
+        ${field("Modelo", `<input class="input" data-veiculo="${veiculo.id}" data-field="modelo" placeholder="Modelo" value="${escapeHTML(veiculo.modelo || "")}" />`)}
+        ${field("Marca", `<input class="input" data-veiculo="${veiculo.id}" data-field="marca" placeholder="Marca" value="${escapeHTML(veiculo.marca || "")}" />`)}
+        ${field("Condutor", `<input class="input" data-veiculo="${veiculo.id}" data-field="condutor" placeholder="Nome do condutor" value="${escapeHTML(veiculo.condutor || "")}" />`)}
+      </div>
+    `)).join("");
+    $$('[data-veiculo]').forEach(input=>{
+      input.addEventListener('input', e=>{
+        const id = e.target.getAttribute('data-veiculo');
+        const field = e.target.getAttribute('data-field');
+        apply(n=>{
+          n.veiculos = (n.veiculos||[]).map(v=> v.id===id ? { ...v, [field]: e.target.value } : v);
+          n.vitimas = (n.vitimas||[]).map(v=> ({ ...v }));
+        });
+      });
+    });
+    $$('[data-del-veiculo]').forEach(btn=>{
+      btn.onclick = ()=>{
+        const id = btn.getAttribute('data-del-veiculo');
+        apply(n=>{
+          n.veiculos = (n.veiculos||[]).filter(v=>v.id!==id);
+          n.vitimas = (n.vitimas||[]).map(v=> v.vehicleId===id ? { ...v, vehicleId:"" } : v);
+        });
+      };
+    });
+  }
+
+  function vehicleOptionLabel(veiculo){
+    const base = [veiculo.placa, veiculo.modelo, veiculo.marca].filter(Boolean).join(' • ');
+    return base || 'Veículo sem identificação';
+  }
+
+  function renderVitimas(){
+    const host = $("#vitimasList");
+    if(!host) return;
+    const items = draft.vitimas || [];
+    if(!items.length){
+      host.innerHTML = card(`<div class="title">Nenhuma vítima adicionada</div><div class="muted">Use o botão acima para incluir as vítimas e vinculá-las aos veículos.</div>`);
+      return;
+    }
+    host.innerHTML = items.map((vitima, index)=>card(`
+      <div class="row space" style="margin-bottom:8px">
+        <div class="title">Vítima ${index + 1}</div>
+        ${btn("Remover","ghost",`type="button" data-del-vitima="${vitima.id}"`)}
+      </div>
+      <div class="grid2">
+        ${field("Nome", `<input class="input" data-vitima="${vitima.id}" data-field="nome" placeholder="Nome da vítima" value="${escapeHTML(vitima.nome || "")}" />`)}
+        ${field("Documento", `<input class="input" data-vitima="${vitima.id}" data-field="documento" inputmode="numeric" pattern="[0-9]*" placeholder="Digite apenas números" value="${escapeHTML(vitima.documento || "")}" />`)}
+        <div class="field">
+          <div class="label">Data de nascimento</div>
+          <input class="input" data-vitima="${vitima.id}" data-field="nascimento" inputmode="numeric" placeholder="DDMMAAAA ou DDMMAA" value="${escapeHTML(formatNascimentoInput(vitima.nascimento || ""))}" />
+        </div>
+        ${field("Idade", `<input class="input" data-vitima="${vitima.id}" data-field="idade" inputmode="numeric" placeholder="anos" value="${escapeHTML(vitima.idade || "")}" />`)}
+        <div class="field" style="grid-column:1/-1">
+          <div class="label">Vincular ao veículo</div>
+          <select class="input" data-vitima="${vitima.id}" data-field="vehicleId">
+            <option value="">Sem vínculo</option>
+            ${(draft.veiculos||[]).map(veiculo=>`<option value="${veiculo.id}" ${vitima.vehicleId===veiculo.id?'selected':''}>${escapeHTML(vehicleOptionLabel(veiculo))}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    `)).join("");
+    $$('[data-vitima]').forEach(input=>{
+      input.addEventListener('input', handleVitimaChange);
+      input.addEventListener('change', handleVitimaChange);
+    });
+    $$('[data-del-vitima]').forEach(btn=>{
+      btn.onclick = ()=>{
+        const id = btn.getAttribute('data-del-vitima');
+        apply(n=>{ n.vitimas = (n.vitimas||[]).filter(v=>v.id!==id); });
+      };
+    });
+  }
+
+  function handleVitimaChange(e){
+    const id = e.target.getAttribute('data-vitima');
+    const field = e.target.getAttribute('data-field');
+    let value = e.target.value;
+    if(field === 'documento' || field === 'idade'){
+      value = onlyDigits(value).slice(0, field === 'idade' ? 3 : 20);
+      e.target.value = value;
+    }
+    if(field === 'nascimento'){
+      const raw = onlyDigits(value).slice(0,8);
+      e.target.value = formatNascimentoInput(raw);
+      const parsed = parseNascimentoDigitado(raw);
+      value = parsed ? parsed.iso : raw;
+    }
+    apply(n=>{
+      n.vitimas = (n.vitimas||[]).map(v=> v.id===id ? { ...v, [field]: value } : v);
+    });
+  }
+
+  function renderLists(){
+    renderVeiculos();
+    renderVitimas();
+  }
+
+  if($("#addVeiculoBtn")) $("#addVeiculoBtn").onclick = ()=>apply(n=>{ n.veiculos = [...(n.veiculos||[]), ensureVehicleShape({})]; });
+  if($("#addVitimaBtn")) $("#addVitimaBtn").onclick = ()=>apply(n=>{ n.vitimas = [...(n.vitimas||[]), ensureTrafficVictimShape({})]; });
+  renderLists();
   $("#saveQtoBtn").onclick = ()=>{
     draft.status = "saved";
-    updateQto(day.id, qto.id, draft, { render:true });
-    setToast("QTO salvo.");
+    updateQto(day.id, qto.id, ensureQtoShape(draft), { render:true });
+    setToast("Registro salvo.");
   };
   wireHoldToDelete(()=>{ deleteQto(day.id, qto.id); location.hash = `#/day/${day.id}`; });
-  function setQtoAdmButtons(tipo){
-    $("#qtoAdmMed").classList.toggle("on", tipo === "medico");
-    $("#qtoAdmEnf").classList.toggle("on", tipo === "enfermeiro");
-  }
-  function syncQtoMacaFields(checked){
-    $("#qtoMacaWrap").style.display = checked ? "block" : "none";
-    ["#qtoMacaNumero", "#qtoAdmNome", "#qtoMacaDT", "#qtoAdmMed", "#qtoAdmEnf"].forEach(sel=>{
-      const el = $(sel);
-      if(el) el.disabled = !checked;
-    });
-  }
 }
 function favoriteField(label, kind, favKey, idBase){
   const inputId = `fav_${idBase}_input`;
@@ -1404,29 +1608,33 @@ function wireHoldToDelete(onConfirm){
   ["pointerup","pointerleave","pointercancel"].forEach(evt=>btn.addEventListener(evt, stop));
 }
 
-function buildAtendimentosPdfHtml(day, evaluations){
+function buildAtendimentosPdfHtml(day, records, options={}){
   const generatedAt = formatDateTimeBR(nowLocalISODateTime());
-  const pages = evaluations.map((ev, index)=>{
-    const resumo = generateResumo(day, ev);
-    const protocolo = String(ev.protocolo || '').trim() || '-';
-    const nome = displayName(ev);
-    const unidade = String(ev.regulacao?.unidade || '').trim();
-    const startedAt = formatTimeBR(ev.startedAt || toLocalISODateTimeFromTimestamp(ev.createdAt)) || '-';
+  const mode = options.mode || "evaluations";
+  const pages = records.map((record, index)=>{
+    const resumo = mode === "qto" ? generateQtoResumo(day, record) : generateResumo(day, record);
+    const protocolo = String(record.protocolo || '').trim() || '-';
+    const nome = mode === "qto" ? getQtoDisplayName(record) : displayName(record);
+    const subtitle = mode === "qto" ? getOccurrenceLabel(record.type) : (String(record.regulacao?.unidade || '').trim() || '-');
+    const startedAt = formatTimeBR(record.startedAt || toLocalISODateTimeFromTimestamp(record.createdAt)) || '-';
+    const titleLabel = mode === "qto" ? "Resumo da ocorrência" : "Resumo do atendimento";
+    const counterLabel = mode === "qto" ? "Ocorrência" : "Atendimento";
+    const subtitleLabel = mode === "qto" ? "Tipo:" : "Unidade:";
     return `
       <section class="pdf-page">
-        <div class="pdf-page__eyebrow">Atendimento ${index + 1} de ${evaluations.length}</div>
-        <div class="pdf-page__title">Resumo do atendimento</div>
+        <div class="pdf-page__eyebrow">${counterLabel} ${index + 1} de ${records.length}</div>
+        <div class="pdf-page__title">${titleLabel}</div>
         <div class="pdf-meta">
           <div><span>Viatura:</span> ${escapeHTML(day?.viatura || '-')}</div>
           <div><span>Data do plantão:</span> ${escapeHTML(day?.dateISO ? formatDateBR(day.dateISO) : '-')}</div>
           <div><span>Protocolo:</span> ${escapeHTML(protocolo)}</div>
-          <div><span>Vítima:</span> ${escapeHTML(nome)}</div>
+          <div><span>Nome:</span> ${escapeHTML(nome)}</div>
           <div><span>Hora de início:</span> ${escapeHTML(startedAt)}</div>
-          <div><span>Unidade:</span> ${escapeHTML(unidade || '-')}</div>
+          <div><span>${subtitleLabel}</span> ${escapeHTML(subtitle || '-')}</div>
         </div>
-        <div class="pdf-separator">Início do atendimento ${index + 1}</div>
+        <div class="pdf-separator">Início ${mode === "qto" ? 'da ocorrência' : 'do atendimento'} ${index + 1}</div>
         <pre class="pdf-resumo">${escapeHTML(resumo)}</pre>
-        <div class="pdf-footer-label">Fim do atendimento ${index + 1}</div>
+        <div class="pdf-footer-label">Fim ${mode === "qto" ? 'da ocorrência' : 'do atendimento'} ${index + 1}</div>
       </section>
     `;
   }).join('');
@@ -1435,7 +1643,7 @@ function buildAtendimentosPdfHtml(day, evaluations){
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Atendimentos ${escapeHTML(day?.viatura || '')} ${escapeHTML(day?.dateISO ? formatDateBR(day.dateISO) : '')}</title>
+  <title>${mode === "qto" ? 'Ocorrências' : 'Atendimentos'} ${escapeHTML(day?.viatura || '')} ${escapeHTML(day?.dateISO ? formatDateBR(day.dateISO) : '')}</title>
   <style>
     :root { color-scheme: light; }
     * { box-sizing: border-box; }
@@ -1462,7 +1670,7 @@ function buildAtendimentosPdfHtml(day, evaluations){
   </style>
 </head>
 <body>
-  <div class="screen-note">PDF de atendimentos preparado em ${escapeHTML(generatedAt)}. Se a janela de impressão não abrir automaticamente, use <strong>Ctrl + P</strong> e escolha <strong>Salvar como PDF</strong>.</div>
+  <div class="screen-note">PDF preparado em ${escapeHTML(generatedAt)}. Se a janela de impressão não abrir automaticamente, use <strong>Ctrl + P</strong> e escolha <strong>Salvar como PDF</strong>.</div>
   <div class="print-wrap">${pages}</div>
   <script>
     window.addEventListener('load', () => {
@@ -1475,9 +1683,10 @@ function buildAtendimentosPdfHtml(day, evaluations){
 </html>`;
 }
 function generateAtendimentosPdf(day){
-  const evaluations = (day?.evaluations || []);
-  if(!evaluations.length){
-    setToast('Nenhum atendimento para gerar PDF.');
+  const qtoMode = isQtoViatura(day?.viatura || "");
+  const records = qtoMode ? (day?.qtos || []) : (day?.evaluations || []);
+  if(!records.length){
+    setToast(qtoMode ? 'Nenhuma ocorrência para gerar PDF.' : 'Nenhum atendimento para gerar PDF.');
     return;
   }
   const popup = window.open('', '_blank');
@@ -1485,11 +1694,11 @@ function generateAtendimentosPdf(day){
     setToast('Permita pop-ups para gerar o PDF.');
     return;
   }
-  const html = buildAtendimentosPdfHtml(day, evaluations);
+  const html = buildAtendimentosPdfHtml(day, records, { mode: qtoMode ? 'qto' : 'evaluations' });
   popup.document.open();
   popup.document.write(html);
   popup.document.close();
-  setToast('Documento preparado para salvar em PDF.');
+  setToast(qtoMode ? 'Documento de ocorrências preparado para salvar em PDF.' : 'Documento preparado para salvar em PDF.');
 }
 
 function showResumoModal(day, ev){
@@ -1557,14 +1766,16 @@ function showQtoResumoModal(day, qto){
   };
 }
 function showCopyProtocolsModal(day){
-  const protocolos = (day?.evaluations || [])
-    .map(ev => String(ev.protocolo || "").trim())
-    .filter(Boolean);
+  const qtoMode = isQtoViatura(day?.viatura || "");
+  const protocolos = qtoMode
+    ? (day?.qtos || []).map(item => String(item.protocolo || "").trim()).filter(Boolean)
+    : (day?.evaluations || []).map(ev => String(ev.protocolo || "").trim()).filter(Boolean);
   if(!protocolos.length){
     setToast("Nenhum protocolo preenchido.");
     return;
   }
-  const text = protocolos.join("\n");
+  const text = protocolos.join("
+");
   const modal = openModal(`
     <div class="modal" role="dialog" aria-modal="true">
       <div class="modal-header">
