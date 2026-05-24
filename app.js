@@ -635,8 +635,7 @@ function renderDay(app, dayId){
   const qtoMode = isQtoViatura(day.viatura || "");
   const left = btn("←","ghost",`type="button" id="backBtn"`);
   const right = qtoMode ? "" : btn("+ Avaliação","primary",`type="button" id="newRecordBtn"`);
-  const countIntegrantes = (day.integrantesText||"").split("
-").map(x=>x.trim()).filter(Boolean).length;
+  const countIntegrantes = (day.integrantesText||"").split("\n").map(x=>x.trim()).filter(Boolean).length;
   app.innerHTML = topbar({title:`${formatDateBR(day.dateISO)} — ${day.viatura||"Sem viatura"}`, left, right}) + `
     <main class="content">
       <div class="muted">${countIntegrantes} integrante(s)</div>
@@ -854,8 +853,7 @@ function generateQtoResumo(day, qto){
     linhas.push("Evolução:");
     linhas.push(qto.evolucao);
   }
-  return linhas.join("
-");
+  return linhas.join("\n");
 }
 function renderEval(app, dayId, evId){
   const day = getDay(dayId);
@@ -1774,8 +1772,7 @@ function showCopyProtocolsModal(day){
     setToast("Nenhum protocolo preenchido.");
     return;
   }
-  const text = protocolos.join("
-");
+  const text = protocolos.join("\n");
   const modal = openModal(`
     <div class="modal" role="dialog" aria-modal="true">
       <div class="modal-header">
